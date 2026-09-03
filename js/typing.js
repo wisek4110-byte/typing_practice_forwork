@@ -140,6 +140,7 @@ var Typing = (function () {
 
     sheet.select(ir, 0);
     sheet.revealRow(targetRow(i), 4);
+    sheet.scroll.scrollLeft = 0;
     focusInput();
 
     S.lineStartT = (S.mode === 'attack') ? playTime() : null;
@@ -200,6 +201,14 @@ var Typing = (function () {
       var c2 = bad ? 'ch-c bad' : 'ch-c';
       if (s.className !== c2) s.className = c2;
     }
+    followCaret();
+  }
+
+  /* 입력 중인 지점이 항상 보이도록 가로 스크롤을 맞춘다. */
+  function followCaret() {
+    var last = S.typedSpans[S.typedSpans.length - 1];
+    var x = last ? last.offsetLeft + last.offsetWidth : 0;
+    sheet.revealX(x);
   }
 
   function onKeyDown(e) {
@@ -520,9 +529,8 @@ var Typing = (function () {
     var head = r.attack
       ? '타임어택 결과 · ' + r.level + '단계'
       : '타자 연습 결과';
-    var desc = r.attack
-      ? (r.reason === 'stopped' ? '중단한 지점까지의 기록입니다.' : (S.text.title + ' · ' + S.text.author))
-      : (S.text.title + ' · ' + S.text.author);
+    var name = S.text.title + (S.text.author ? ' · ' + S.text.author : '');
+    var desc = (r.attack && r.reason === 'stopped') ? '중단한 지점까지의 기록입니다.' : name;
 
     var m = Chrome.buildModal(head, desc);
     var grid = U.el('div', 'result');
