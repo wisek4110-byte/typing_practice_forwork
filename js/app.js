@@ -60,7 +60,7 @@ var App = (function () {
     U.save('selected', id);
     U.$('#textPickerLabel').textContent = text ? text.title : '기본값';
     U.$('#textPickerBtn').title = text
-      ? ('연습할 글: ' + text.title + ' · ' + text.author)
+      ? ('연습할 글: ' + text.title + (text.author ? ' · ' + text.author : ''))
       : '연습할 글 선택';
     Typing.setText(text);
   }
@@ -100,7 +100,8 @@ var App = (function () {
     }
 
     TEXTS.forEach(function (t) {
-      dd.appendChild(item(t.id, t.title, t.author + ' · ' + t.lines.length + '줄'));
+      dd.appendChild(item(t.id, t.title,
+        (t.author ? t.author + ' · ' : '') + t.lines.length + '줄'));
     });
 
     dd.appendChild(U.el('div', 'dropdown__sep'));

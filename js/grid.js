@@ -219,6 +219,14 @@ Sheet.prototype.select = function (r, c, silent) {
   if (!silent) this.onSelect(r, c, this.getCell(r, c));
 };
 
+/* 긴 문장을 칠 때 커서 위치가 화면 밖으로 나가지 않게 가로로 따라간다. */
+Sheet.prototype.revealX = function (x, pad) {
+  pad = pad == null ? 140 : pad;
+  var sc = this.scroll, view = sc.clientWidth;
+  if (x > sc.scrollLeft + view - pad) sc.scrollLeft = x - view + pad;
+  else if (x < sc.scrollLeft + pad) sc.scrollLeft = Math.max(0, x - pad);
+};
+
 Sheet.prototype.revealRow = function (r, pad) {
   pad = pad == null ? 3 : pad;
   var top = r * ROW_H;
