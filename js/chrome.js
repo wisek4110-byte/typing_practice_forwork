@@ -287,11 +287,19 @@ var Chrome = (function () {
     var panel = U.$('#toolbarOverflow');
     var groups = Array.prototype.slice.call(inner.querySelectorAll('[data-tbg]'));
     var widths = [];
+    var moreW = 34;
+    /* 창이 좁아져도 접지 않고 계속 보여 줄 그룹(글 선택 도구) */
+    var pinIdx = -1;
+    groups.forEach(function (g, i) { if (g.hasAttribute('data-tbg-pin')) pinIdx = i; });
 
     function measure() {
       widths = groups.map(function (g) {
         return g.getBoundingClientRect().width + 11;  // 구분선 여백 포함
       });
+      var wasHidden = more.hidden;
+      more.hidden = false;
+      moreW = more.getBoundingClientRect().width || 34;
+      more.hidden = wasHidden;
     }
 
     function place(parent, list) {
@@ -306,24 +314,33 @@ var Chrome = (function () {
     }
 
     function layout() {
-      var avail = inner.getBoundingClientRect().width;
+      /* ⋮ 버튼이 보이는지에 따라 폭이 달라지므로, 없다고 보고 잰 뒤 필요할 때만 빼 준다. */
+      var full = inner.getBoundingClientRect().width + (more.hidden ? 0 : moreW);
       var total = widths.reduce(function (a, b) { return a + b; }, 0);
-      var fit = groups.length;
-      if (total > avail) {
-        var acc = 0;
-        fit = 0;
-        for (var i = 0; i < groups.length; i++) {
-          acc += widths[i];
-          if (acc > avail) break;
-          fit++;
-        }
-        if (fit < 1) fit = 1;
-      }
-      /* 원래 순서를 유지한 채 배치 (여러 번 줄였다 늘려도 순서가 섞이지 않게) */
-      place(inner, groups.slice(0, fit));
-      place(panel, groups.slice(fit));
+      var avail = (total <= full) ? full : full - moreW;
 
-      var hidden = groups.length - fit;
+      /* 고정 그룹 자리를 먼저 확보하고, 남는 폭을 앞에서부터 채운다. */
+      var budget = avail - (pinIdx >= 0 ? widths[pinIdx] : 0);
+      var inBar = [];
+      var acc = 0;
+      for (var i = 0; i < groups.length; i++) {
+        if (i === pinIdx) continue;
+        acc += widths[i];
+        if (acc > budget) break;
+        inBar.push(i);
+      }
+      if (pinIdx >= 0) inBar.push(pinIdx);
+      else if (!inBar.length) inBar.push(0);
+      inBar.sort(function (a, b) { return a - b; });
+
+      var keep = {};
+      inBar.forEach(function (i) { keep[i] = true; });
+
+      /* 원래 순서를 유지한 채 배치 (여러 번 줄였다 늘려도 순서가 섞이지 않게) */
+      place(inner, inBar.map(function (i) { return groups[i]; }));
+      place(panel, groups.filter(function (g, i) { return !keep[i]; }));
+
+      var hidden = groups.length - inBar.length;
       more.hidden = hidden === 0;
       if (hidden === 0 && !panel.hidden) closePanel();
     }
