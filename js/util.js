@@ -123,6 +123,48 @@ var U = (function () {
     return out;
   }
 
+  /* ---------- 붙여넣은 글을 연습용 줄로 ----------
+     한 문장이 한 줄이 되게 나눈다. 따옴표 안에서는 끊지 않는다. */
+  var ENDERS = '.?!\u2026';
+  var CLOSERS = '\u201d\u2019")]\u300f\u300d\u300b\'';
+  var OPENERS = '\u201c\u2018"([\u300e\u300c\u300a';
+  /* 곧은 따옴표는 여는지 닫는지 알 수 없으므로 번갈아 처리한다 */
+  var AMBIG = '"\'';
+
+  function splitSentences(text) {
+    var out = [], buf = '', quote = 0;
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      buf += ch;
+      if (AMBIG.indexOf(ch) >= 0) quote = quote > 0 ? quote - 1 : quote + 1;
+      else if (OPENERS.indexOf(ch) >= 0) quote++;
+      else if (CLOSERS.indexOf(ch) >= 0 && quote > 0) quote--;
+      if (quote > 0 || ENDERS.indexOf(ch) < 0) continue;
+
+      var j = i + 1;
+      while (j < text.length && ENDERS.indexOf(text[j]) >= 0) { buf += text[j]; j++; }
+      while (j < text.length && CLOSERS.indexOf(text[j]) >= 0) { buf += text[j]; j++; }
+      if (j >= text.length || /\s/.test(text[j])) {
+        if (buf.trim()) out.push(buf.trim());
+        buf = '';
+        while (j < text.length && /\s/.test(text[j])) j++;
+      }
+      i = j - 1;
+    }
+    if (buf.trim()) out.push(buf.trim());
+    return out;
+  }
+
+  /* 한 셀에 담긴 글 → 연습용 줄 배열 */
+  function toPracticeLines(raw, max) {
+    max = max || 80;
+    var out = [];
+    splitSentences(String(raw)).forEach(function (sent) {
+      out = out.concat(wrapLine(sent, max));
+    });
+    return out;
+  }
+
   /* ---------- 위장용 업무 데이터 ---------- */
   var VENDORS = ['대성물산','한빛테크','서진상사','유니콘무역','제일산업','다올유통',
                  '성일이엔지','금호상사','태평양물류','비전코리아','하나상역','우리테크윈',
@@ -185,6 +227,8 @@ var U = (function () {
     strokeOf: strokeOf, strokeTable: strokeTable, strokeSum: strokeSum,
     mmss: mmss, comma: comma, colName: colName, pad2: pad2,
     wrapLine: wrapLine,
+    splitSentences: splitSentences,
+    toPracticeLines: toPracticeLines,
     DISGUISE_HEAD: DISGUISE_HEAD,
     disguiseRow: disguiseRow,
     disguiseFormula: disguiseFormula

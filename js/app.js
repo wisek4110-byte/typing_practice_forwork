@@ -12,6 +12,9 @@ var App = (function () {
 
   /* ---------------- 수식 입력줄 ---------------- */
   function onSelect(r, c, cell, sheet) {
+    /* 숨어 있는 시트의 선택이 수식 입력줄을 덮어쓰지 않게 한다.
+       (시트2에서 글을 넣으면 시트1이 다시 그려지며 선택이 바뀐다) */
+    if (sheet && sheets[active] && sheet !== sheets[active]) return;
     nameBox.textContent = sheet ? sheet.rangeLabel() : U.colName(c) + (r + 1);
     formulaValue.textContent = cell.f || cell.v || '';
   }
@@ -53,21 +56,23 @@ var App = (function () {
   function buildCustomList() {
     var s2 = sheets['시트2'];
     var out = [], over = 0;
-    for (var c = 0; c < s2.cols; c++) {
-      var lines = [];
-      for (var r = 0; r < s2.rows; r++) {
+    for (var r = 0; r < s2.rows; r++) {
+      for (var c = 0; c < s2.cols; c++) {
         var v = s2.data[r][c].v;
-        if (v !== '') lines = lines.concat(U.wrapLine(v, 46));
+        if (v === '') continue;
+        var lines = U.toPracticeLines(v);
+        if (!lines.length) continue;
+        if (out.length >= CUSTOM_MAX) { over++; continue; }
+        var ref = U.colName(c) + (r + 1);
+        out.push({
+          id: 'custom:' + r + ':' + c,
+          r: r, c: c, ref: ref,
+          title: '커스텀 글 ' + ref,
+          author: '',
+          lines: lines,
+          snippet: v.length > 22 ? v.slice(0, 22) + '...' : v
+        });
       }
-      if (!lines.length) continue;
-      if (out.length >= CUSTOM_MAX) { over++; continue; }
-      out.push({
-        id: 'custom:' + c,
-        col: c,
-        title: '커스텀 글 ' + U.colName(c),
-        author: '',
-        lines: lines
-      });
     }
     customOver = over;
     return out;
@@ -131,15 +136,15 @@ var App = (function () {
     });
 
     dd.appendChild(U.el('div', 'dropdown__sep'));
-    dd.appendChild(U.el('div', 'dropdown__label', '시트2 (열 하나에 글 하나, 최대 ' + CUSTOM_MAX + '개)'));
+    dd.appendChild(U.el('div', 'dropdown__label', '시트2 (최대 ' + CUSTOM_MAX + '개)'));
     customList = buildCustomList();
     if (customList.length) {
       customList.forEach(function (t) {
-        dd.appendChild(item(t.id, t.title, t.lines.length + '줄'));
+        dd.appendChild(item(t.id, t.title, t.snippet));
       });
       if (customOver) {
         dd.appendChild(item('over', '글이 ' + CUSTOM_MAX + '개를 넘었습니다',
-          U.colName(CUSTOM_MAX) + '열 뒤는 안 씁니다', false));
+          '앞의 ' + CUSTOM_MAX + '개만 씁니다', false));
       }
     } else {
       dd.appendChild(item('custom:none', '시트2가 비어 있음', '아무 셀에나 붙여넣으세요', false));
@@ -164,9 +169,10 @@ var App = (function () {
     ['h', '시트2  내 글 넣기'],
     ['b', '아무 셀에나 원하는 글을 붙여넣거나(Ctrl+V) 직접 입력합니다.'],
     ['b', '넣은 내용은 그대로 시트1의 연습 글이 됩니다.'],
-    ['b', '한 행이 연습 글의 한 줄이 되고, 너무 긴 줄은 어절 단위로 나뉩니다.'],
-    ['b', '열 하나가 글 하나입니다. A열, B열... 에 따로 넣으면 최대 5개까지 만들어집니다.'],
+    ['b', '셀 하나에 글 하나가 통째로 들어갑니다. 줄로 쪼개지 않습니다.'],
+    ['b', '셀을 여러 개 쓰면 글도 여러 개가 되고, 최대 5개까지 씁니다.'],
     ['b', '만든 글은 툴바의 글 선택 도구에서 골라 씁니다.'],
+    ['b', '연습할 때는 한 문장이 한 줄이 되도록 자동으로 나뉩니다.'],
     ['', ''],
     ['h', '시트2  여러 칸 선택과 지우기'],
     ['b', '셀을 끌면 여러 칸이 한 번에 선택됩니다.'],
@@ -294,13 +300,10 @@ var App = (function () {
     var hint = U.el('div', 'sheethint');
     hint.innerHTML =
       '아무 셀에나 원하는 글을 붙여넣으세요. <b>(Ctrl+V)</b><br>' +
-      '넣은 내용이 그대로 <b>시트1</b>의 연습 글이 됩니다.<br><br>' +
-      '<b>열 하나가 글 하나</b>입니다. A열, B열... 에 따로 넣으면 최대 <b>5개</b>까지 만들어지고,<br>' +
-      '툴바의 글 선택 도구에서 골라 쓸 수 있습니다.<br><br>' +
-      '지울 때는 <b>끌어서 여러 칸을 선택</b>하거나 <b>열 머리글(A, B...)을 클릭</b>한 뒤 Delete 를 누르세요.<br>' +
-      'Ctrl+A 로 전체 선택, Shift+방향키로도 넓힐 수 있습니다.';
+      '넣은 내용이 그대로 <b>시트1</b>의 연습 글이 됩니다.<br>' +
+      '셀 하나에 글 하나씩, <b>최대 5개</b>까지 넣을 수 있습니다.';
     sheets['시트2'] = new Sheet({
-      name: '시트2', rows: 60, editable: true,
+      name: '시트2', rows: 60, editable: true, pasteMode: 'cell',
       onSelect: onSelect,
       onChange: function (r0, c0) {
         var s2 = sheets['시트2'];
@@ -318,7 +321,7 @@ var App = (function () {
            그 열을 비웠으면 남은 커스텀 글, 그마저 없으면 내장 글로 돌아간다. */
         var target = null, i;
         for (i = 0; i < customList.length; i++) {
-          if (customList[i].col === c0) { target = customList[i]; break; }
+          if (customList[i].r === r0 && customList[i].c === c0) { target = customList[i]; break; }
         }
         if (target) applyText(target, target.id);
         else if (customList.length) applyText(customList[0], customList[0].id);

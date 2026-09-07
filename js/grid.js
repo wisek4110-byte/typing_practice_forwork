@@ -31,6 +31,7 @@ function Sheet(opts) {
   this.cols = opts.cols || 26;
   this.rows = 0;
   this.editable = !!opts.editable;
+  this.pasteMode = opts.pasteMode || 'grid';   /* 'cell' 이면 붙여넣은 글 전체가 한 칸에 */
   this.onSelect = opts.onSelect || function () {};
   this.onChange = opts.onChange || function () {};
   this.data = [];
@@ -475,11 +476,22 @@ Sheet.prototype.extendSel = function (dr, dc) {
   this.revealRow(this.sel.r, 1);
 };
 
-/* 여러 줄/여러 칸 붙여넣기 → 선택 셀부터 아래로 채운다. */
 Sheet.prototype._paste = function (e) {
   var text = (e.clipboardData || window.clipboardData).getData('text');
   if (!text) return;
   e.preventDefault();
+
+  /* 글 한 편을 한 칸에 담는 방식 (시트2). 줄로 쪼개지 않는다. */
+  if (this.pasteMode === 'cell') {
+    var one = text.replace(/\s+/g, ' ').trim();
+    if (!one) return;
+    this.setCell(this.sel.r, this.sel.c, one);
+    this.select(this.sel.r, this.sel.c);
+    this.onChange(this.sel.r, this.sel.c);
+    return;
+  }
+
+  /* 여러 줄/여러 칸 붙여넣기 → 선택 셀부터 아래로 채운다. */
   var rows = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   while (rows.length && rows[rows.length - 1] === '') rows.pop();
   var r0 = this.sel.r, c0 = this.sel.c;
