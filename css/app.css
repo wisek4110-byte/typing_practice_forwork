@@ -23,12 +23,15 @@
   /* 셀 기본 크기: 창 크기와 무관하게 고정 */
   --col-w: 100px;
   --row-h: 21px;
+  --cell-fs: 13px;          /* 10pt 기준. 툴바에서 10~24pt 로 바꾼다 */
   --rowhead-w: 46px;
   --colhead-h: 24px;
 
-  --typing-pending: #9aa0a6;
+  --typing-pending: #5f6368;
   --typing-ok:      #1f1f1f;
   --typing-bad:     #d93025;
+  --band-target:    #fef7e0;   /* 따라 칠 글줄 */
+  --band-entry:     #e8f0fe;   /* 입력칸 */
 }
 
 *{ box-sizing:border-box; }
@@ -240,8 +243,13 @@ button{ font-family:inherit; }
   width:34px; height:26px;
   background:#fff; border:1px solid #d5d8dc; border-radius:4px;
   font-size:13px; color:var(--text-dim);
+  font-family:inherit;
+  text-align:center;
+  padding:0;
+  outline:none;
   flex:none;
 }
+.tbfield:focus{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
 
 /* 글 선택 도구 (원래 글꼴 지정 토글 자리) */
 .tbtn--select{
@@ -404,7 +412,7 @@ button{ font-family:inherit; }
   height:var(--row-h);
   border-right:1px solid var(--gridline);
   border-bottom:1px solid var(--gridline);
-  font-size:13px;
+  font-size:var(--cell-fs);
   color:var(--text);
   overflow:visible;
   cursor:cell;
@@ -448,7 +456,7 @@ button{ font-family:inherit; }
   min-width:100%;
   border:0; outline:none;
   padding:0 3px;
-  font-family:inherit; font-size:13px;
+  font-family:inherit; font-size:var(--cell-fs);
   line-height:calc(var(--row-h) - 1px);
   background:#fff;
   z-index:7;
@@ -458,18 +466,27 @@ button{ font-family:inherit; }
    타자 연습용 셀
    ------------------------------------------------------------ */
 .cell--target{ z-index:2; }
-.cell--target .ch-c{ color:var(--typing-pending); transition:opacity .12s linear; }
+/* 치고 있는 줄은 굵게 — 아직 안 친 글자도 흐리지 않게 */
+.cell--target .ch-c{
+  color:var(--typing-pending);
+  font-weight:700;
+  transition:opacity .12s linear;
+}
 .cell--target .ch-c.ok{ color:var(--typing-ok); }
 .cell--target .ch-c.bad{ color:var(--typing-bad); text-decoration:underline; text-decoration-color:var(--typing-bad); }
 
+/* 지금 치는 자리를 한눈에 알 수 있도록 그 줄에 색을 깐다 */
+.g-row.is-target{ background:var(--band-target); }
+.g-row.is-entry{ background:var(--band-entry); }
+
 .cell--input{
   z-index:6;
-  background:#fff;
+  background:transparent;      /* 줄 배경색이 그대로 보이도록 */
   outline:2px solid var(--accent);
   outline-offset:-2px;
 }
-.cell--input .ch-c{ color:var(--typing-ok); }
-.cell--input .ch-c.bad{ color:var(--typing-bad); background:#fce8e6; }
+.cell--input .ch-c{ color:var(--typing-ok); font-weight:700; }
+.cell--input .ch-c.bad{ color:var(--typing-bad); background:#fad2cf; }
 .typebox{
   position:absolute; left:0; top:0;
   height:calc(var(--row-h) - 1px);
@@ -479,7 +496,7 @@ button{ font-family:inherit; }
   color:transparent;
   caret-color:var(--text);
   font-family:inherit;
-  font-size:13px;
+  font-size:var(--cell-fs);
   line-height:calc(var(--row-h) - 1px);
   z-index:8;
   overflow:hidden;

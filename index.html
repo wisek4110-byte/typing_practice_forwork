@@ -111,9 +111,10 @@
         </div>
 
         <div class="tbg" data-tbg>
-          <button class="tbtn tbtn--glyph" title="글꼴 크기 작게">−</button>
-          <span class="tbfield">10</span>
-          <button class="tbtn tbtn--glyph" title="글꼴 크기 크게">+</button>
+          <button class="tbtn tbtn--glyph" id="fontDown" title="글꼴 크기 작게 (최소 10)">−</button>
+          <input class="tbfield" id="fontSize" type="text" inputmode="numeric"
+                 value="10" maxlength="2" title="글꼴 크기 10~24" aria-label="글꼴 크기">
+          <button class="tbtn tbtn--glyph" id="fontUp" title="글꼴 크기 크게 (최대 24)">+</button>
         </div>
 
         <div class="tbg" data-tbg>

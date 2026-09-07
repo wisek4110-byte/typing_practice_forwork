@@ -6,6 +6,26 @@
 var COL_W = 100;
 var ROW_H = 21;
 
+/* 셀 글자 크기(pt). 툴바의 - [10] + 로 10~24 사이에서 바꾼다.
+   실제 시트처럼 글자가 커지면 행 높이도 같이 커진다. */
+var FONT_MIN = 10, FONT_MAX = 24;
+var fontPt = 10;
+
+function applyFontPt(pt, sheets) {
+  fontPt = Math.max(FONT_MIN, Math.min(FONT_MAX, Math.round(pt) || FONT_MIN));
+  var px = Math.round(fontPt * 4 / 3);
+  ROW_H = Math.max(21, px + 8);
+  var root = document.documentElement.style;
+  root.setProperty('--cell-fs', px + 'px');
+  root.setProperty('--row-h', ROW_H + 'px');
+  if (sheets) {
+    for (var k in sheets) {
+      if (Object.prototype.hasOwnProperty.call(sheets, k)) sheets[k].resizeRows();
+    }
+  }
+  return fontPt;
+}
+
 function Sheet(opts) {
   this.name = opts.name;
   this.cols = opts.cols || 26;
@@ -197,6 +217,24 @@ Sheet.prototype._reflowRow = function (r) {
     t.style.maxWidth = span + 'px';
     next = c;
   }
+};
+
+/* ---------- 행 강조 ----------
+   지금 치고 있는 글줄/입력칸에 색을 깐다. */
+Sheet.prototype.setRowMark = function (r, cls) {
+  var row = this.canvas.children[r];
+  if (row) row.classList.add(cls);
+};
+Sheet.prototype.clearRowMarks = function () {
+  var rows = this.canvas.querySelectorAll('.g-row.is-target, .g-row.is-entry');
+  for (var i = 0; i < rows.length; i++) {
+    rows[i].classList.remove('is-target', 'is-entry');
+  }
+};
+
+/* 글자 크기가 바뀌어 행 높이가 달라졌을 때 전체 높이를 다시 잡는다. */
+Sheet.prototype.resizeRows = function () {
+  this.canvas.style.height = (this.rows * ROW_H) + 'px';
 };
 
 /* ---------- 선택 ---------- */
