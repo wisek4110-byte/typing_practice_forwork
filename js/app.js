@@ -5,13 +5,14 @@ var App = (function () {
 
   var stage, sheets = {}, active = '시트1';
   var selectedId = null;
-  var customCache = null;
+  var customList = [];
+  var customOver = 0;
 
   var nameBox, formulaValue;
 
   /* ---------------- 수식 입력줄 ---------------- */
-  function onSelect(r, c, cell) {
-    nameBox.textContent = U.colName(c) + (r + 1);
+  function onSelect(r, c, cell, sheet) {
+    nameBox.textContent = sheet ? sheet.rangeLabel() : U.colName(c) + (r + 1);
     formulaValue.textContent = cell.f || cell.v || '';
   }
 
@@ -34,7 +35,7 @@ var App = (function () {
       b.classList.toggle('is-active', b.dataset.name === name);
     });
     var s = sheets[name];
-    onSelect(s.sel.r, s.sel.c, s.getCell(s.sel.r, s.sel.c));
+    onSelect(s.sel.r, s.sel.c, s.getCell(s.sel.r, s.sel.c), s);
     if (name === '시트1') Typing.refocus();
   }
 
@@ -44,15 +45,39 @@ var App = (function () {
     return null;
   }
 
-  /* 시트2의 내용을 연습용 글로 변환 */
-  function buildCustom() {
-    var raw = sheets['시트2'].toLines();
-    var lines = [];
-    raw.forEach(function (l) {
-      lines = lines.concat(U.wrapLine(l, 46));
-    });
-    if (!lines.length) return null;
-    return { id: 'custom', title: '시트2 커스텀 글', author: '직접 입력', lines: lines };
+  /* 시트2의 내용을 연습용 글로 변환.
+     열 하나가 글 하나가 되고, 그 열의 셀이 위에서부터 한 줄씩이다.
+     용량을 생각해 한 번에 5개까지만 쓴다. */
+  var CUSTOM_MAX = 5;
+
+  function buildCustomList() {
+    var s2 = sheets['시트2'];
+    var out = [], over = 0;
+    for (var c = 0; c < s2.cols; c++) {
+      var lines = [];
+      for (var r = 0; r < s2.rows; r++) {
+        var v = s2.data[r][c].v;
+        if (v !== '') lines = lines.concat(U.wrapLine(v, 46));
+      }
+      if (!lines.length) continue;
+      if (out.length >= CUSTOM_MAX) { over++; continue; }
+      out.push({
+        id: 'custom:' + c,
+        col: c,
+        title: '커스텀 글 ' + U.colName(c),
+        author: '',
+        lines: lines
+      });
+    }
+    customOver = over;
+    return out;
+  }
+
+  function customById(id) {
+    for (var i = 0; i < customList.length; i++) {
+      if (customList[i].id === id) return customList[i];
+    }
+    return null;
   }
 
   function applyText(text, id) {
@@ -66,9 +91,10 @@ var App = (function () {
   }
 
   function selectText(id) {
-    if (id === 'custom') {
-      customCache = buildCustom();
-      if (customCache) applyText(customCache, 'custom');
+    if (id.indexOf('custom:') === 0) {
+      customList = buildCustomList();
+      var c = customById(id);
+      if (c) applyText(c, c.id);
       return;
     }
     var t = textById(id) || TEXTS[0];
@@ -105,12 +131,18 @@ var App = (function () {
     });
 
     dd.appendChild(U.el('div', 'dropdown__sep'));
-    dd.appendChild(U.el('div', 'dropdown__label', '시트2'));
-    customCache = buildCustom();
-    if (customCache) {
-      dd.appendChild(item('custom', '시트2 커스텀 글', customCache.lines.length + '줄'));
+    dd.appendChild(U.el('div', 'dropdown__label', '시트2 (열 하나에 글 하나, 최대 ' + CUSTOM_MAX + '개)'));
+    customList = buildCustomList();
+    if (customList.length) {
+      customList.forEach(function (t) {
+        dd.appendChild(item(t.id, t.title, t.lines.length + '줄'));
+      });
+      if (customOver) {
+        dd.appendChild(item('over', '글이 ' + CUSTOM_MAX + '개를 넘었습니다',
+          U.colName(CUSTOM_MAX) + '열 뒤는 안 씁니다', false));
+      }
     } else {
-      dd.appendChild(item('custom', '시트2 커스텀 글', '시트2가 비어 있음', false));
+      dd.appendChild(item('custom:none', '시트2가 비어 있음', '아무 셀에나 붙여넣으세요', false));
     }
 
     Chrome.showDropdown(btn, dd);
@@ -133,6 +165,14 @@ var App = (function () {
     ['b', '아무 셀에나 원하는 글을 붙여넣거나(Ctrl+V) 직접 입력합니다.'],
     ['b', '넣은 내용은 그대로 시트1의 연습 글이 됩니다.'],
     ['b', '한 행이 연습 글의 한 줄이 되고, 너무 긴 줄은 어절 단위로 나뉩니다.'],
+    ['b', '열 하나가 글 하나입니다. A열, B열... 에 따로 넣으면 최대 5개까지 만들어집니다.'],
+    ['b', '만든 글은 툴바의 글 선택 도구에서 골라 씁니다.'],
+    ['', ''],
+    ['h', '시트2  여러 칸 선택과 지우기'],
+    ['b', '셀을 끌면 여러 칸이 한 번에 선택됩니다.'],
+    ['b', '열 머리글(A, B...)을 누르면 그 열 전체, 행 머리글은 그 행 전체가 선택됩니다.'],
+    ['b', '왼쪽 위 모서리를 누르거나 Ctrl+A 를 누르면 시트 전체가 선택됩니다.'],
+    ['b', 'Shift+방향키로도 범위를 넓힐 수 있고, Delete 로 한 번에 지웁니다.'],
     ['', ''],
     ['h', '글 선택 도구'],
     ['b', '툴바에서 글꼴 자리에 있는 목록이 글 선택 도구입니다.'],
@@ -244,20 +284,25 @@ var App = (function () {
     Chrome.init();
 
     /* 시트1 : 타자 연습 */
-    sheets['시트1'] = new Sheet({ name: '시트1', rows: 60, editable: false, onSelect: function (r, c, cell) {
-      onSelect(r, c, cell);
-      Typing.refocus();
-    } });
+    sheets['시트1'] = new Sheet({ name: '시트1', rows: 60, editable: false,
+      onSelect: function (r, c, cell, sheet) {
+        onSelect(r, c, cell, sheet);
+        Typing.refocus();
+      } });
 
     /* 시트2 : 붙여넣기 */
     var hint = U.el('div', 'sheethint');
     hint.innerHTML =
       '아무 셀에나 원하는 글을 붙여넣으세요. <b>(Ctrl+V)</b><br>' +
-      '넣은 내용이 그대로 <b>시트1</b>의 연습 글이 됩니다.';
+      '넣은 내용이 그대로 <b>시트1</b>의 연습 글이 됩니다.<br><br>' +
+      '<b>열 하나가 글 하나</b>입니다. A열, B열... 에 따로 넣으면 최대 <b>5개</b>까지 만들어지고,<br>' +
+      '툴바의 글 선택 도구에서 골라 쓸 수 있습니다.<br><br>' +
+      '지울 때는 <b>끌어서 여러 칸을 선택</b>하거나 <b>열 머리글(A, B...)을 클릭</b>한 뒤 Delete 를 누르세요.<br>' +
+      'Ctrl+A 로 전체 선택, Shift+방향키로도 넓힐 수 있습니다.';
     sheets['시트2'] = new Sheet({
       name: '시트2', rows: 60, editable: true,
       onSelect: onSelect,
-      onChange: function () {
+      onChange: function (r0, c0) {
         var s2 = sheets['시트2'];
         updateHint(s2, hint);
         var cells = [];
@@ -267,10 +312,17 @@ var App = (function () {
           }
         }
         U.save('sheet2', cells);
-        customCache = buildCustom();
-        if (customCache) {
-          applyText(customCache, 'custom');
-        } else if (selectedId === 'custom') {
+
+        customList = buildCustomList();
+        /* 방금 손댄 열의 글을 시트1로 보낸다.
+           그 열을 비웠으면 남은 커스텀 글, 그마저 없으면 내장 글로 돌아간다. */
+        var target = null, i;
+        for (i = 0; i < customList.length; i++) {
+          if (customList[i].col === c0) { target = customList[i]; break; }
+        }
+        if (target) applyText(target, target.id);
+        else if (customList.length) applyText(customList[0], customList[0].id);
+        else if (selectedId && selectedId.indexOf('custom:') === 0) {
           applyText(TEXTS[0], TEXTS[0].id);
         }
       }
@@ -299,10 +351,15 @@ var App = (function () {
     updateHint(sheets['시트2'], hint);
 
     /* 연습할 글 결정 */
-    customCache = buildCustom();
+    customList = buildCustomList();
     var want = U.load('selected', TEXTS[0].id);
-    if (want === 'custom' && customCache) applyText(customCache, 'custom');
-    else applyText(textById(want) || TEXTS[0], (textById(want) || TEXTS[0]).id);
+    var wantCustom = (typeof want === 'string' && want.indexOf('custom:') === 0)
+      ? customById(want) : null;
+    if (wantCustom) applyText(wantCustom, wantCustom.id);
+    else {
+      var t0 = textById(want) || TEXTS[0];
+      applyText(t0, t0.id);
+    }
 
     buildTabs();
     U.$('#textPickerBtn').addEventListener('click', function (e) {

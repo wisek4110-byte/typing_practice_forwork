@@ -35,7 +35,8 @@ function Sheet(opts) {
   this.onChange = opts.onChange || function () {};
   this.data = [];
   this.els = [];
-  this.sel = { r: 0, c: 0 };
+  this.sel = { r: 0, c: 0 };     /* 활성 셀 */
+  this.anchor = { r: 0, c: 0 };  /* 범위의 시작점 */
   this.editing = null;
   this._build();
   this.ensureRows(opts.rows || 60);
@@ -70,6 +71,10 @@ Sheet.prototype._build = function () {
     'position:absolute;left:0;top:0;width:1px;height:1px;opacity:0;' +
     'border:0;padding:0;resize:none;z-index:1;';
 
+  /* 선택 범위를 덮는 사각형 (셀마다 색을 입히지 않고 한 장으로 그린다) */
+  var selBox = U.el('div', 'g-selbox');
+  canvas.appendChild(selBox);
+
   area.appendChild(catcher);
   area.appendChild(scroll);
   area.appendChild(colhead);
@@ -98,8 +103,45 @@ Sheet.prototype._build = function () {
     if (!inEditor) e.preventDefault();
     var r = +cell.dataset.r, c = +cell.dataset.c;
     if (self.editing && (self.editing.r !== r || self.editing.c !== c)) self.commitEdit();
-    self.select(r, c);
+
+    if (e.shiftKey) {
+      self.selectRange(self.anchor.r, self.anchor.c, r, c);   /* 시작점 두고 넓히기 */
+    } else {
+      self.select(r, c);
+      if (!inEditor) self._drag = true;                       /* 끌어서 여러 칸 선택 */
+    }
     if (!inEditor && self.editable && !self.editing) self.focusCatcher();
+  });
+
+  canvas.addEventListener('mousemove', function (e) {
+    if (!self._drag) return;
+    var cell = e.target.closest ? e.target.closest('.cell') : null;
+    if (!cell || cell.parentNode.parentNode !== canvas) return;
+    var r = +cell.dataset.r, c = +cell.dataset.c;
+    if (r === self.sel.r && c === self.sel.c) return;
+    self.selectRange(self.anchor.r, self.anchor.c, r, c);
+  });
+  document.addEventListener('mouseup', function () { self._drag = false; });
+
+  /* 열/행 머리글을 누르면 그 줄 전체가 선택된다 */
+  colhead.addEventListener('mousedown', function (e) {
+    var i = Array.prototype.indexOf.call(colheadInner.children, e.target);
+    if (i < 0) return;
+    e.preventDefault();
+    self.selectRange(0, i, self.rows - 1, i);
+    self.focusCatcher();
+  });
+  rowhead.addEventListener('mousedown', function (e) {
+    var i = Array.prototype.indexOf.call(rowheadInner.children, e.target);
+    if (i < 0) return;
+    e.preventDefault();
+    self.selectRange(i, 0, i, self.cols - 1);
+    self.focusCatcher();
+  });
+  corner.addEventListener('mousedown', function (e) {
+    e.preventDefault();
+    self.selectRange(0, 0, self.rows - 1, self.cols - 1);
+    self.focusCatcher();
   });
 
   canvas.addEventListener('dblclick', function (e) {
@@ -116,6 +158,8 @@ Sheet.prototype._build = function () {
 
   this.area = area;
   this.canvas = canvas;
+  this.selBox = selBox;
+  this._drag = false;
   this.scroll = scroll;
   this.colheadInner = colheadInner;
   this.rowheadInner = rowheadInner;
@@ -162,6 +206,7 @@ Sheet.prototype.ensureRows = function (n) {
   this.rows = n;
   this.canvas.style.width = (this.cols * COL_W) + 'px';
   this.canvas.style.height = (this.rows * ROW_H) + 'px';
+  if (this.selBox) this._paintSelection();
 };
 
 /* ---------- 셀 값 ---------- */
@@ -235,26 +280,81 @@ Sheet.prototype.clearRowMarks = function () {
 /* 글자 크기가 바뀌어 행 높이가 달라졌을 때 전체 높이를 다시 잡는다. */
 Sheet.prototype.resizeRows = function () {
   this.canvas.style.height = (this.rows * ROW_H) + 'px';
+  this._paintSelection();
 };
 
-/* ---------- 선택 ---------- */
+/* ---------- 선택 ----------
+   한 칸 선택은 시작점과 끝점이 같은 범위로 다룬다. */
 Sheet.prototype.select = function (r, c, silent) {
-  r = Math.max(0, Math.min(r, this.rows - 1));
-  c = Math.max(0, Math.min(c, this.cols - 1));
+  this.selectRange(r, c, r, c, silent);
+};
+
+Sheet.prototype.selectRange = function (ar, ac, fr, fc, silent) {
+  var clampR = function (v, n) { return Math.max(0, Math.min(v, n - 1)); };
+  ar = clampR(ar, this.rows); fr = clampR(fr, this.rows);
+  ac = clampR(ac, this.cols); fc = clampR(fc, this.cols);
+
   var prev = this.cellEl(this.sel.r, this.sel.c);
   if (prev) prev.classList.remove('is-sel');
-  this.colheadInner.children[this.sel.c] &&
-    this.colheadInner.children[this.sel.c].classList.remove('is-active');
-  this.rowheadInner.children[this.sel.r] &&
-    this.rowheadInner.children[this.sel.r].classList.remove('is-active');
 
-  this.sel = { r: r, c: c };
-  var cur = this.cellEl(r, c);
+  this.anchor = { r: ar, c: ac };
+  this.sel = { r: fr, c: fc };
+
+  var cur = this.cellEl(fr, fc);
   if (cur) cur.classList.add('is-sel');
-  this.colheadInner.children[c] && this.colheadInner.children[c].classList.add('is-active');
-  this.rowheadInner.children[r] && this.rowheadInner.children[r].classList.add('is-active');
+  this._paintSelection();
 
-  if (!silent) this.onSelect(r, c, this.getCell(r, c));
+  if (!silent) this.onSelect(fr, fc, this.getCell(fr, fc), this);
+};
+
+/* 지금 선택된 범위 (정규화) */
+Sheet.prototype.getRange = function () {
+  return {
+    r1: Math.min(this.anchor.r, this.sel.r), r2: Math.max(this.anchor.r, this.sel.r),
+    c1: Math.min(this.anchor.c, this.sel.c), c2: Math.max(this.anchor.c, this.sel.c)
+  };
+};
+
+Sheet.prototype.rangeLabel = function () {
+  var g = this.getRange();
+  var a = U.colName(g.c1) + (g.r1 + 1);
+  if (g.r1 === g.r2 && g.c1 === g.c2) return a;
+  return a + ':' + U.colName(g.c2) + (g.r2 + 1);
+};
+
+Sheet.prototype._paintSelection = function () {
+  var g = this.getRange();
+  var box = this.selBox;
+  box.style.left = (g.c1 * COL_W) + 'px';
+  box.style.top = (g.r1 * ROW_H) + 'px';
+  box.style.width = ((g.c2 - g.c1 + 1) * COL_W - 1) + 'px';
+  box.style.height = ((g.r2 - g.r1 + 1) * ROW_H - 1) + 'px';
+  box.classList.toggle('is-multi', g.r1 !== g.r2 || g.c1 !== g.c2);
+
+  var i, ch = this.colheadInner.children, rh = this.rowheadInner.children;
+  for (i = 0; i < ch.length; i++) ch[i].classList.toggle('is-active', i >= g.c1 && i <= g.c2);
+  for (i = 0; i < rh.length; i++) rh[i].classList.toggle('is-active', i >= g.r1 && i <= g.r2);
+};
+
+/* 선택한 범위를 한 번에 비운다 (행마다 넘침 계산은 한 번씩만) */
+Sheet.prototype.clearRange = function () {
+  var g = this.getRange(), r, c, touched = false;
+  for (r = g.r1; r <= g.r2; r++) {
+    var rowTouched = false;
+    for (c = g.c1; c <= g.c2; c++) {
+      var d = this.data[r][c];
+      if (d.v === '' && !d.f && !d.cls) continue;
+      d.v = ''; d.f = null; d.num = false; d.cls = '';
+      var cell = this.els[r][c];
+      cell.className = 'cell';
+      cell.querySelector('.cell__t').textContent = '';
+      rowTouched = true;
+    }
+    if (rowTouched) { this._reflowRow(r); touched = true; }
+  }
+  var cur = this.cellEl(this.sel.r, this.sel.c);
+  if (cur) cur.classList.add('is-sel');
+  return touched;
 };
 
 /* 긴 문장을 칠 때 커서 위치가 화면 밖으로 나가지 않게 가로로 따라간다. */
@@ -317,7 +417,7 @@ Sheet.prototype.commitEdit = function () {
   var t = this.cellEl(e.r, e.c).querySelector('.cell__t');
   t.style.visibility = '';
   this.setCell(e.r, e.c, v);
-  this.onChange();
+  this.onChange(e.r, e.c);
   this.focusCatcher();
 };
 
@@ -336,24 +436,43 @@ Sheet.prototype.moveSel = function (dr, dc) {
   this.revealRow(this.sel.r, 1);
 };
 
+var ARROWS = { ArrowDown: [1, 0], ArrowUp: [-1, 0], ArrowRight: [0, 1], ArrowLeft: [0, -1] };
+
 Sheet.prototype._catcherKey = function (e) {
   if (this.editing) return;
   var k = e.key;
-  if (k === 'ArrowDown') { e.preventDefault(); this.moveSel(1, 0); return; }
-  if (k === 'ArrowUp') { e.preventDefault(); this.moveSel(-1, 0); return; }
-  if (k === 'ArrowRight') { e.preventDefault(); this.moveSel(0, 1); return; }
-  if (k === 'ArrowLeft') { e.preventDefault(); this.moveSel(0, -1); return; }
-  if (k === 'Enter') { e.preventDefault(); this.startEdit(this.sel.r, this.sel.c, null); return; }
-  if (k === 'F2') { e.preventDefault(); this.startEdit(this.sel.r, this.sel.c, null); return; }
-  if (k === 'Delete' || k === 'Backspace') {
+
+  if (ARROWS[k]) {
     e.preventDefault();
-    this.setCell(this.sel.r, this.sel.c, '');
-    this.onChange();
+    var d = ARROWS[k];
+    if (e.shiftKey) this.extendSel(d[0], d[1]);   /* Shift+방향키로 범위 넓히기 */
+    else this.moveSel(d[0], d[1]);
     return;
   }
+  if ((e.ctrlKey || e.metaKey) && (k === 'a' || k === 'A' || k === 'ㅁ')) {
+    e.preventDefault();
+    this.selectRange(0, 0, this.rows - 1, this.cols - 1);
+    return;
+  }
+  if (k === 'Enter' || k === 'F2') {
+    e.preventDefault(); this.startEdit(this.sel.r, this.sel.c, null); return;
+  }
+  if (k === 'Delete' || k === 'Backspace') {
+    e.preventDefault();
+    if (this.clearRange()) this.onChange(this.sel.r, this.getRange().c1);
+    return;
+  }
+  if (k === 'Escape') { e.preventDefault(); this.select(this.sel.r, this.sel.c); return; }
   if (k === 'Tab') { e.preventDefault(); this.moveSel(0, e.shiftKey ? -1 : 1); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (k.length === 1) { e.preventDefault(); this.startEdit(this.sel.r, this.sel.c, k); }
+};
+
+/* 시작점은 두고 끝점만 움직여 범위를 넓힌다 */
+Sheet.prototype.extendSel = function (dr, dc) {
+  this.ensureRows(Math.max(this.rows, this.sel.r + dr + 1));
+  this.selectRange(this.anchor.r, this.anchor.c, this.sel.r + dr, this.sel.c + dc);
+  this.revealRow(this.sel.r, 1);
 };
 
 /* 여러 줄/여러 칸 붙여넣기 → 선택 셀부터 아래로 채운다. */
@@ -373,7 +492,7 @@ Sheet.prototype._paste = function (e) {
   }
   this.select(Math.min(r0 + rows.length, this.rows - 1), c0);
   this.revealRow(this.sel.r, 1);
-  this.onChange();
+  this.onChange(r0, c0);
 };
 
 /* 시트 전체를 줄 배열로 (시트2 → 시트1 전달용) */
