@@ -124,6 +124,7 @@ var App = (function () {
     ['b', '회색 글줄 바로 아래 빈 칸에 같은 내용을 입력합니다.'],
     ['b', 'Enter 를 누르면 다음 줄의 입력칸으로 넘어갑니다.'],
     ['b', '줄을 끝까지 입력했다면 Space 로도 다음 줄로 넘어갑니다.'],
+    ['b', '지금 치는 글줄과 입력칸에는 색이 깔리고 글자가 굵게 나옵니다.'],
     ['b', '입력을 마친 줄은 업무용 데이터로 바뀌어 표시됩니다.'],
     ['b', '바뀐 셀을 클릭하면 수식 입력줄에 함수가 보입니다.'],
     ['b', '마지막 줄까지 마치면 결과 창이 열립니다. Enter 로 닫습니다.'],
@@ -137,6 +138,11 @@ var App = (function () {
     ['b', '툴바에서 글꼴 자리에 있는 목록이 글 선택 도구입니다.'],
     ['b', '내장된 글과 시트2 커스텀 글 중에서 고를 수 있습니다.'],
     ['b', '창이 좁아져도 글 선택 도구는 접히지 않고 그대로 보입니다.'],
+    ['', ''],
+    ['h', '글자 크기'],
+    ['b', '툴바의 - 10 + 에서 10 ~ 24pt 로 바꿉니다.'],
+    ['b', '숫자 칸에 직접 넣거나 위/아래 방향키로도 조절됩니다.'],
+    ['b', '글자가 커지면 행 높이도 같이 커집니다.'],
     ['', ''],
     ['h', '타임어택'],
     ['b', 'Ctrl + X : 타임어택 시작 (레벨 선택 창이 열립니다)'],
@@ -171,6 +177,38 @@ var App = (function () {
   function updateHint(sheet, hintEl) {
     var empty = sheet.toLines().length === 0;
     hintEl.style.display = empty ? '' : 'none';
+  }
+
+  /* ---------------- 글자 크기 (10~24) ---------------- */
+  function initFontSize() {
+    var field = U.$('#fontSize');
+
+    function apply(pt, save) {
+      var v = applyFontPt(pt, sheets);
+      field.value = String(v);
+      if (save !== false) U.save('fontPt', v);
+      /* 행 높이가 바뀌었으니 지금 치는 줄이 계속 보이도록 맞춘다 */
+      if (active === '시트1') Typing.reveal();
+      return v;
+    }
+
+    U.$('#fontDown').addEventListener('click', function () {
+      apply(fontPt - 1); Typing.refocus();
+    });
+    U.$('#fontUp').addEventListener('click', function () {
+      apply(fontPt + 1); Typing.refocus();
+    });
+    field.addEventListener('keydown', function (e) {
+      if (e.isComposing) return;
+      if (e.key === 'Enter') { e.preventDefault(); apply(+field.value); field.blur(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); apply(fontPt + 1); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); apply(fontPt - 1); }
+      else if (e.key === 'Escape') { e.preventDefault(); field.value = String(fontPt); field.blur(); }
+    });
+    field.addEventListener('blur', function () { apply(+field.value); });
+    field.addEventListener('focus', function () { field.select(); });
+
+    apply(U.load('fontPt', 10), false);
   }
 
   /* ---------------- 전역 단축키 ---------------- */
@@ -272,6 +310,7 @@ var App = (function () {
       openTextPicker();
     });
 
+    initFontSize();
     initKeys();
     activate('시트1');
   }

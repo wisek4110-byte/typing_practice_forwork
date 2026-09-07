@@ -85,6 +85,12 @@ var Typing = (function () {
 
   function render() {
     sheet.clearAll();
+    sheet.clearRowMarks();
+    /* clearAll 은 셀의 글자만 지우므로, 이전 글에서 쓰던 입력칸을 직접 걷어낸다.
+       놔두면 글을 바꿀 때마다 숨은 입력칸이 쌓여 포커스를 가로챈다. */
+    var stale = sheet.canvas.querySelectorAll('.typebox');
+    for (var k = 0; k < stale.length; k++) stale[k].remove();
+    S.input = null;
     var t = S.text;
     if (!t || !t.lines.length) {
       sheet.setCell(ROW_TITLE, 0, '연습할 글이 없습니다.', { cls: 'is-hint' });
@@ -137,6 +143,11 @@ var Typing = (function () {
     input.addEventListener('compositionend', function () { S.composing = false; paint(); });
     input.addEventListener('input', onInput);
     input.addEventListener('keydown', onKeyDown);
+
+    /* 지금 치는 글줄과 입력칸에 색을 깐다 */
+    sheet.clearRowMarks();
+    sheet.setRowMark(targetRow(i), 'is-target');
+    sheet.setRowMark(ir, 'is-entry');
 
     sheet.select(ir, 0);
     sheet.revealRow(targetRow(i), 4);
@@ -479,6 +490,7 @@ var Typing = (function () {
   /* ---------------- 결과 ---------------- */
   function finish(reason) {
     S.finished = true;
+    sheet.clearRowMarks();
     var attack = S.mode === 'attack';
     stopLoop();
     if (S.input) { S.input.remove(); S.input = null; }
@@ -565,6 +577,11 @@ var Typing = (function () {
     setText: setText,
     currentText: currentText,
     refocus: function () { if (!Chrome.modalOpen()) focusInput(); },
+    /* 글자 크기가 바뀌어 행 높이가 달라졌을 때 다시 화면에 맞춘다 */
+    reveal: function () {
+      if (!S || !S.text || !S.text.lines.length || S.finished) return;
+      sheet.revealRow(targetRow(S.idx), 4);
+    },
     hotkey: hotkey,
     stopAttack: stopAttack,
     isAttackActive: function () { return S && S.mode === 'attack' && S.attack.running; },
