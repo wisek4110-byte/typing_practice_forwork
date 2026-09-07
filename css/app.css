@@ -447,6 +447,20 @@ button{ font-family:inherit; }
   background:var(--accent);
   border:1px solid #fff;
   border-radius:1px;
+  z-index:2;
+}
+
+/* 여러 칸을 선택했을 때 덮는 사각형 (셀마다 칠하지 않고 한 장으로) */
+.g-selbox{
+  position:absolute;
+  left:0; top:0; width:0; height:0;
+  pointer-events:none;
+  z-index:4;
+  border:2px solid transparent;
+}
+.g-selbox.is-multi{
+  border-color:var(--accent);
+  background:rgba(11,87,208,.10);
 }
 
 /* 셀 직접 편집(시트2) */
