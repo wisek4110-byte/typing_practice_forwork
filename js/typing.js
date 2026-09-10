@@ -279,9 +279,9 @@ var Typing = (function () {
   function disguisePair(i) {
     if (!S.headDisguised) {
       S.headDisguised = true;
-      sheet.setCell(ROW_TITLE, 0, '2026년 3분기 품목별 매출 집계표', {
+      sheet.setCell(ROW_TITLE, 0, '구입도서 신청목록', {
         cls: 'is-title',
-        formula: '="2026년 "&ROUNDUP(MONTH($I$3)/3,0)&"분기 품목별 매출 집계표"'
+        formula: '=설정!$B$1&" 구입도서 신청목록"'
       });
       for (var c = 0; c < U.DISGUISE_HEAD.length; c++) {
         sheet.setCell(ROW_AUTHOR, c, U.DISGUISE_HEAD[c], {
