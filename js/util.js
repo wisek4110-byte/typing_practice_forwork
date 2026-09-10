@@ -165,8 +165,27 @@ var U = (function () {
     return out;
   }
 
-  /* ---------- 위장용 업무 데이터 ----------
-     도서관 수서 담당자의 '구입도서 신청목록'처럼 보이게 한다.
+  /* ---------- 위장표 ----------
+     연습을 마친 줄이 바뀌어 보이는 표. 두 가지 중에서 고른다.
+       sales   : 일반 업무용 매출 집계표
+       library : 도서관 수서용 구입도서 신청목록 */
+
+  /* 행 번호를 씨앗으로 쓰는 고정 난수 (다시 눌러도 값이 변하지 않게) */
+  function seeded(n) {
+    var x = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
+    return x - Math.floor(x);
+  }
+  function pick(list, n) { return list[Math.floor(seeded(n) * list.length) % list.length]; }
+
+  /* --- 일반 업무용: 매출 집계표 --- */
+  var VENDORS = ['대성물산','한빛테크','서진상사','유니콘무역','제일산업','다올유통',
+                 '성일이엔지','금호상사','태평양물류','비전코리아','하나상역','우리테크윈',
+                 '동방기전','신일전자','케이엠씨'];
+  var OWNERS  = ['김서연','박지훈','이도현','최민서','정하윤','오세훈','강유진','윤태경'];
+  var ITEMS   = ['볼밸브','유압호스','베어링','감속기','컨트롤러','센서모듈',
+                 '커플링','에어필터','모터드라이브','기어펌프'];
+
+  /* --- 도서관 수서용: 구입도서 신청목록 ---
      서명 / 저자 / 출판사는 실제로 있는 책이고, 주문권수와 합산가는 지어낸 값이다. */
   var BOOKS = [
     ['트렌드 코리아 2026', '김난도', '미래의창', 20000],
@@ -211,44 +230,98 @@ var U = (function () {
     ['미드나잇 라이브러리', '매트 헤이그', '인플루엔셜', 16800]
   ];
 
-  var DISGUISE_HEAD = ['번호', '서명', '저자', '출판사', '주문권수', '단가', '합산가'];
+  var DISGUISES = {
+    sales: {
+      id: 'sales',
+      name: '매출 집계표',
+      sub: '일반 업무용',
+      title: '2026년 3분기 품목별 매출 집계표',
+      titleFormula: '="2026년 "&ROUNDUP(MONTH($I$3)/3,0)&"분기 품목별 매출 집계표"',
+      head: ['품목코드','거래처','품목명','수량','단가','공급가액','부가세','합계','등록일','담당'],
+      row: function (r) {
+        var qty   = 5 + Math.floor(seeded(r + 1) * 240);
+        var price = (12 + Math.floor(seeded(r + 2) * 380)) * 500;
+        var supply = qty * price;
+        var vat = Math.round(supply * 0.1);
+        var day = 1 + Math.floor(seeded(r + 3) * 28);
+        var month = 7 + Math.floor(seeded(r + 4) * 3);
+        return [
+          { v: 'PRD-' + (2000 + Math.floor(seeded(r + 5) * 900)), num: false },
+          { v: pick(VENDORS, r + 6), num: false },
+          { v: pick(ITEMS, r + 7) + ' ' + (10 + Math.floor(seeded(r + 8) * 80)) + 'A', num: false },
+          { v: comma(qty), num: true },
+          { v: comma(price), num: true },
+          { v: comma(supply), num: true },
+          { v: comma(vat), num: true },
+          { v: comma(supply + vat), num: true },
+          { v: '2026-' + pad2(month) + '-' + pad2(day), num: true },
+          { v: pick(OWNERS, r + 9), num: false }
+        ];
+      },
+      formula: function (col, r) {
+        switch (col) {
+          case 0: return '=INDEX(품목마스터!$A:$A,MATCH($C' + r + ',품목마스터!$C:$C,0))';
+          case 1: return '=VLOOKUP($A' + r + ',거래처마스터!$A:$D,2,FALSE)';
+          case 2: return '=VLOOKUP($A' + r + ',품목마스터!$A:$C,3,FALSE)';
+          case 3: return '=SUMIFS(출고내역!$E:$E,출고내역!$B:$B,$A' + r + ')';
+          case 4: return '=VLOOKUP($A' + r + ',단가표!$A:$C,3,FALSE)';
+          case 5: return '=ROUND($D' + r + '*$E' + r + ',0)';
+          case 6: return '=ROUND($F' + r + '*0.1,0)';
+          case 7: return '=SUM($F' + r + ':$G' + r + ')';
+          case 8: return '=EOMONTH($I$2,-1)+' + ((r % 27) + 1);
+          case 9: return '=IFERROR(VLOOKUP($B' + r + ',담당자!$A:$B,2,FALSE),"미배정")';
+          default: return '';
+        }
+      }
+    },
 
-  /* 행 번호를 씨앗으로 쓰는 고정 난수 (다시 눌러도 값이 변하지 않게) */
-  function seeded(n) {
-    var x = Math.sin(n * 12.9898 + 78.233) * 43758.5453;
-    return x - Math.floor(x);
-  }
-
-  function disguiseRow(rowIndex) {
-    /* 목록이 한 바퀴 다 돌기 전에는 같은 책이 다시 나오지 않게 건너뛰며 고른다 */
-    var book = BOOKS[(rowIndex * 17) % BOOKS.length];
-    var copies = 1 + Math.floor(seeded(rowIndex + 1) * 5);   /* 1~5권 */
-    var price = book[3];
-    return [
-      { v: String(Math.max(1, rowIndex - 1)), num: true },
-      { v: book[0], num: false },
-      { v: book[1], num: false },
-      { v: book[2], num: false },
-      { v: String(copies), num: true },
-      { v: comma(price), num: true },
-      { v: comma(copies * price), num: true }
-    ];
-  }
-
-  /* 위장된 셀을 클릭하면 수식 입력줄에 보이는 함수 */
-  function disguiseFormula(col, row1) {
-    var r = row1;
-    switch (col) {
-      case 0: return '=ROW()-2';
-      case 1: return '=VLOOKUP($A' + r + ',수서대장!$A:$E,2,FALSE)';
-      case 2: return '=VLOOKUP($A' + r + ',수서대장!$A:$E,3,FALSE)';
-      case 3: return '=VLOOKUP($A' + r + ',수서대장!$A:$E,4,FALSE)';
-      case 4: return '=SUMIF(신청내역!$B:$B,$B' + r + ',신청내역!$D:$D)';
-      case 5: return '=VLOOKUP($B' + r + ',정가표!$A:$B,2,FALSE)';
-      case 6: return '=ROUND($E' + r + '*$F' + r + ',0)';
-      default: return '';
+    library: {
+      id: 'library',
+      name: '구입도서 신청목록',
+      sub: '도서관 수서용',
+      title: '구입도서 신청목록',
+      titleFormula: '=설정!$B$1&" 구입도서 신청목록"',
+      head: ['번호','서명','저자','출판사','주문권수','단가','합산가'],
+      row: function (r) {
+        /* 목록이 한 바퀴 다 돌기 전에는 같은 책이 다시 나오지 않게 건너뛰며 고른다 */
+        var book = BOOKS[(r * 17) % BOOKS.length];
+        var copies = 1 + Math.floor(seeded(r + 1) * 5);   /* 1~5권 */
+        var price = book[3];
+        return [
+          { v: String(Math.max(1, r - 1)), num: true },
+          { v: book[0], num: false },
+          { v: book[1], num: false },
+          { v: book[2], num: false },
+          { v: String(copies), num: true },
+          { v: comma(price), num: true },
+          { v: comma(copies * price), num: true }
+        ];
+      },
+      formula: function (col, r) {
+        switch (col) {
+          case 0: return '=ROW()-2';
+          case 1: return '=VLOOKUP($A' + r + ',수서대장!$A:$E,2,FALSE)';
+          case 2: return '=VLOOKUP($A' + r + ',수서대장!$A:$E,3,FALSE)';
+          case 3: return '=VLOOKUP($A' + r + ',수서대장!$A:$E,4,FALSE)';
+          case 4: return '=SUMIF(신청내역!$B:$B,$B' + r + ',신청내역!$D:$D)';
+          case 5: return '=VLOOKUP($B' + r + ',정가표!$A:$B,2,FALSE)';
+          case 6: return '=ROUND($E' + r + '*$F' + r + ',0)';
+          default: return '';
+        }
+      }
     }
+  };
+
+  var DISGUISE_ORDER = ['sales', 'library'];
+  var disguiseId = 'sales';
+
+  function setDisguise(id) {
+    if (DISGUISES[id]) disguiseId = id;
+    return disguiseId;
   }
+  function getDisguise() { return DISGUISES[disguiseId]; }
+  function disguiseRow(rowIndex) { return getDisguise().row(rowIndex); }
+  function disguiseFormula(col, row1) { return getDisguise().formula(col, row1); }
 
   return {
     el: el, $: $, save: save, load: load,
@@ -257,7 +330,10 @@ var U = (function () {
     wrapLine: wrapLine,
     splitSentences: splitSentences,
     toPracticeLines: toPracticeLines,
-    DISGUISE_HEAD: DISGUISE_HEAD,
+    DISGUISES: DISGUISES,
+    DISGUISE_ORDER: DISGUISE_ORDER,
+    setDisguise: setDisguise,
+    getDisguise: getDisguise,
     disguiseRow: disguiseRow,
     disguiseFormula: disguiseFormula
   };
