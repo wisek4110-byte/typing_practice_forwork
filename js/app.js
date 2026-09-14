@@ -14,7 +14,7 @@ var App = (function () {
     disguiseId = U.setDisguise(id);
     U.save('disguise', disguiseId);
     Typing.repaintDisguise();
-    Typing.refocus();
+    activate('시트1');
   }
 
   var nameBox, formulaValue;
@@ -162,24 +162,6 @@ var App = (function () {
       dd.appendChild(item('custom:none', '시트2가 비어 있음', '아무 셀에나 붙여넣으세요', false));
     }
 
-    /* 연습을 마친 줄이 무엇으로 바뀔지 (위장표) */
-    dd.appendChild(U.el('div', 'dropdown__sep'));
-    dd.appendChild(U.el('div', 'dropdown__label', '위장표'));
-    U.DISGUISE_ORDER.forEach(function (id) {
-      var d = U.DISGUISES[id];
-      var b = U.el('button', 'dropdown__item');
-      b.type = 'button';
-      b.appendChild(U.el('span', 'dropdown__check', disguiseId === id ? '\u2713' : ''));
-      b.appendChild(U.el('span', 'dropdown__main', d.name));
-      b.appendChild(U.el('span', 'dropdown__sub', d.sub));
-      b.addEventListener('click', function () {
-        Chrome.hideDropdown();
-        selectDisguise(id);
-        activate('시트1');
-      });
-      dd.appendChild(b);
-    });
-
     Chrome.showDropdown(btn, dd);
   }
 
@@ -193,7 +175,7 @@ var App = (function () {
     ['b', '줄을 끝까지 입력했다면 Space 로도 다음 줄로 넘어갑니다.'],
     ['b', '지금 치는 글줄과 입력칸에는 색이 깔리고 글자가 굵게 나옵니다.'],
     ['b', '입력을 마친 줄은 업무용 표로 바뀌어 표시됩니다.'],
-    ['b', '글 선택 도구 아래에서 매출 집계표 / 구입도서 신청목록 중 고릅니다.'],
+    ['b', '파일 > 새 문서 에서 매출 집계표 / 구입도서 신청목록 중 고릅니다.'],
     ['b', '바뀐 셀을 클릭하면 수식 입력줄에 함수가 보입니다.'],
     ['b', '마지막 줄까지 마치면 결과 창이 열립니다. Enter 로 닫습니다.'],
     ['', ''],
@@ -409,13 +391,19 @@ var App = (function () {
     });
 
     initFontSize();
+    Menus.init();
     initKeys();
     activate('시트1');
   }
 
   return {
     init: init,
-    refocus: function () { if (active === '시트1') Typing.refocus(); else sheets[active].focusCatcher(); }
+    selectDisguise: selectDisguise,
+    disguiseId: function () { return disguiseId; },
+    refocus: function () {
+      if (typeof Menus !== 'undefined' && Menus.isOpen()) return;
+      if (active === '시트1') Typing.refocus(); else sheets[active].focusCatcher();
+    }
   };
 })();
 
