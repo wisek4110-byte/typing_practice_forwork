@@ -526,7 +526,7 @@ var Typing = (function () {
     var acc = compared > 0 ? (matched / compared) * 100 : 0;
     var typos = Math.max(0, compared - matched);
 
-    showResult({
+    var result = {
       attack: attack,
       reason: reason,
       avg: Math.round(avg),
@@ -537,7 +537,10 @@ var Typing = (function () {
       lines: lines,
       allLines: S.text.lines.length,
       level: S.attack.level
-    });
+    };
+    /* 타임어택 기록만 게시판에 남긴다 */
+    if (attack && typeof Board !== 'undefined') Board.record(result);
+    showResult(result);
   }
 
   function box(k, v, unit, wide) {
@@ -574,6 +577,12 @@ var Typing = (function () {
     m.appendChild(hint);
 
     var a = Chrome.actions(m);
+    if (r.attack && r.lines) {
+      a.appendChild(Chrome.button('기록 보기', 'btn--outline', function () {
+        Chrome.closeModal();
+        Board.open();
+      }));
+    }
     a.appendChild(Chrome.button('확인', 'btn--primary', done));
 
     function done() {
