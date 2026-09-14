@@ -276,22 +276,37 @@ var Typing = (function () {
   }
 
   /* ---------------- 위장 ---------------- */
+  function writeHead() {
+    var d = U.getDisguise();
+    sheet.clearRow(ROW_AUTHOR);
+    sheet.setCell(ROW_TITLE, 0, d.title, { cls: 'is-title', formula: d.titleFormula });
+    for (var c = 0; c < d.head.length; c++) {
+      sheet.setCell(ROW_AUTHOR, c, d.head[c], {
+        cls: 'is-head',
+        formula: '=INDEX(설정!$B:$B,' + (c + 1) + ')'
+      });
+    }
+  }
+
   function disguisePair(i) {
     if (!S.headDisguised) {
       S.headDisguised = true;
-      sheet.setCell(ROW_TITLE, 0, '2026년 3분기 품목별 매출 집계표', {
-        cls: 'is-title',
-        formula: '="2026년 "&ROUNDUP(MONTH($I$3)/3,0)&"분기 품목별 매출 집계표"'
-      });
-      for (var c = 0; c < U.DISGUISE_HEAD.length; c++) {
-        sheet.setCell(ROW_AUTHOR, c, U.DISGUISE_HEAD[c], {
-          cls: 'is-head',
-          formula: '=INDEX(설정!$B:$B,' + (c + 1) + ')'
-        });
-      }
+      writeHead();
     }
     writeDataRow(targetRow(i));
     writeDataRow(inputRow(i));
+  }
+
+  /* 위장표를 바꾸면 이미 바뀐 줄들을 그 표로 다시 그린다 (진행 상황은 그대로) */
+  function repaintDisguise() {
+    if (!S || !S.headDisguised) return;
+    writeHead();
+    for (var i = 0; i < S.idx; i++) {
+      sheet.clearRow(targetRow(i));
+      sheet.clearRow(inputRow(i));
+      writeDataRow(targetRow(i));
+      writeDataRow(inputRow(i));
+    }
   }
 
   function writeDataRow(r) {
@@ -583,6 +598,7 @@ var Typing = (function () {
       sheet.revealRow(targetRow(S.idx), 4);
     },
     hotkey: hotkey,
+    repaintDisguise: repaintDisguise,
     stopAttack: stopAttack,
     isAttackActive: function () { return S && S.mode === 'attack' && S.attack.running; },
     isFinished: function () { return S && S.finished; }

@@ -36,6 +36,7 @@ function Sheet(opts) {
   this.onChange = opts.onChange || function () {};
   this.data = [];
   this.els = [];
+  this.rowEls = [];
   this.sel = { r: 0, c: 0 };     /* 활성 셀 */
   this.anchor = { r: 0, c: 0 };  /* 범위의 시작점 */
   this.editing = null;
@@ -198,6 +199,7 @@ Sheet.prototype.ensureRows = function (n) {
       rowEls.push(cell);
     }
     frag.appendChild(rowEl);
+    this.rowEls.push(rowEl);
     this.data.push(rowData);
     this.els.push(rowEls);
     hfrag.appendChild(U.el('div', 'rh', String(r + 1)));
@@ -268,7 +270,9 @@ Sheet.prototype._reflowRow = function (r) {
 /* ---------- 행 강조 ----------
    지금 치고 있는 글줄/입력칸에 색을 깐다. */
 Sheet.prototype.setRowMark = function (r, cls) {
-  var row = this.canvas.children[r];
+  /* canvas 의 첫 자식은 선택 사각형이므로 children 으로 세면 한 칸 밀린다.
+     행 엘리먼트를 따로 들고 있다가 그대로 쓴다. */
+  var row = this.rowEls[r];
   if (row) row.classList.add(cls);
 };
 Sheet.prototype.clearRowMarks = function () {
