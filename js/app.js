@@ -14,7 +14,7 @@ var App = (function () {
     disguiseId = U.setDisguise(id);
     U.save('disguise', disguiseId);
     Typing.repaintDisguise();
-    Typing.refocus();
+    activate('시트1');
   }
 
   var nameBox, formulaValue;
@@ -79,7 +79,10 @@ var App = (function () {
           title: '커스텀 글 ' + ref,
           author: '',
           lines: lines,
-          snippet: v.length > 22 ? v.slice(0, 22) + '...' : v
+          snippet: (function (t) {
+            t = t.split(U.LINE_BREAK).join(' ').replace(/\s+/g, ' ').trim();
+            return t.length > 22 ? t.slice(0, 22) + '...' : t;
+          })(v)
         });
       }
     }
@@ -159,24 +162,6 @@ var App = (function () {
       dd.appendChild(item('custom:none', '시트2가 비어 있음', '아무 셀에나 붙여넣으세요', false));
     }
 
-    /* 연습을 마친 줄이 무엇으로 바뀔지 (위장표) */
-    dd.appendChild(U.el('div', 'dropdown__sep'));
-    dd.appendChild(U.el('div', 'dropdown__label', '위장표'));
-    U.DISGUISE_ORDER.forEach(function (id) {
-      var d = U.DISGUISES[id];
-      var b = U.el('button', 'dropdown__item');
-      b.type = 'button';
-      b.appendChild(U.el('span', 'dropdown__check', disguiseId === id ? '\u2713' : ''));
-      b.appendChild(U.el('span', 'dropdown__main', d.name));
-      b.appendChild(U.el('span', 'dropdown__sub', d.sub));
-      b.addEventListener('click', function () {
-        Chrome.hideDropdown();
-        selectDisguise(id);
-        activate('시트1');
-      });
-      dd.appendChild(b);
-    });
-
     Chrome.showDropdown(btn, dd);
   }
 
@@ -190,7 +175,7 @@ var App = (function () {
     ['b', '줄을 끝까지 입력했다면 Space 로도 다음 줄로 넘어갑니다.'],
     ['b', '지금 치는 글줄과 입력칸에는 색이 깔리고 글자가 굵게 나옵니다.'],
     ['b', '입력을 마친 줄은 업무용 표로 바뀌어 표시됩니다.'],
-    ['b', '글 선택 도구 아래에서 매출 집계표 / 구입도서 신청목록 중 고릅니다.'],
+    ['b', '파일 > 새 문서 에서 매출 집계표 / 구입도서 신청목록 중 고릅니다.'],
     ['b', '바뀐 셀을 클릭하면 수식 입력줄에 함수가 보입니다.'],
     ['b', '마지막 줄까지 마치면 결과 창이 열립니다. Enter 로 닫습니다.'],
     ['', ''],
@@ -200,7 +185,10 @@ var App = (function () {
     ['b', '셀 하나에 글 하나가 통째로 들어갑니다. 줄로 쪼개지 않습니다.'],
     ['b', '셀을 여러 개 쓰면 글도 여러 개가 되고, 최대 5개까지 씁니다.'],
     ['b', '만든 글은 툴바의 글 선택 도구에서 골라 씁니다.'],
-    ['b', '연습할 때는 한 문장이 한 줄이 되도록 자동으로 나뉩니다.'],
+    ['b', '붙여넣을 때 누른 줄바꿈은 그대로 지켜집니다.'],
+    ['b', '가사나 시처럼 행 나눔이 정해진 글도 원래 모양대로 연습합니다.'],
+    ['b', '한 줄이 100자를 넘을 때만 문장 단위로 더 나눕니다.'],
+    ['b', '셀 안에서는 줄바꿈이 화살표(↵) 로 보입니다.'],
     ['', ''],
     ['h', '시트2  여러 칸 선택과 지우기'],
     ['b', '셀을 끌면 여러 칸이 한 번에 선택됩니다.'],
@@ -329,7 +317,8 @@ var App = (function () {
     hint.innerHTML =
       '아무 셀에나 원하는 글을 붙여넣으세요. <b>(Ctrl+V)</b><br>' +
       '넣은 내용이 그대로 <b>시트1</b>의 연습 글이 됩니다.<br>' +
-      '셀 하나에 글 하나씩, <b>최대 5개</b>까지 넣을 수 있습니다.';
+      '셀 하나에 글 하나씩, <b>최대 5개</b>까지 넣을 수 있습니다.<br>' +
+      '붙여넣은 <b>줄바꿈은 그대로</b> 지켜집니다. (가사 · 시)';
     sheets['시트2'] = new Sheet({
       name: '시트2', rows: 60, editable: true, pasteMode: 'cell',
       onSelect: onSelect,
@@ -402,13 +391,19 @@ var App = (function () {
     });
 
     initFontSize();
+    Menus.init();
     initKeys();
     activate('시트1');
   }
 
   return {
     init: init,
-    refocus: function () { if (active === '시트1') Typing.refocus(); else sheets[active].focusCatcher(); }
+    selectDisguise: selectDisguise,
+    disguiseId: function () { return disguiseId; },
+    refocus: function () {
+      if (typeof Menus !== 'undefined' && Menus.isOpen()) return;
+      if (active === '시트1') Typing.refocus(); else sheets[active].focusCatcher();
+    }
   };
 })();
 

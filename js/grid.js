@@ -487,7 +487,7 @@ Sheet.prototype._paste = function (e) {
 
   /* 글 한 편을 한 칸에 담는 방식 (시트2). 줄로 쪼개지 않는다. */
   if (this.pasteMode === 'cell') {
-    var one = text.replace(/\s+/g, ' ').trim();
+    var one = U.toCellValue(text);   /* 사용자가 누른 줄바꿈을 표시로 남긴다 */
     if (!one) return;
     this.setCell(this.sel.r, this.sel.c, one);
     this.select(this.sel.r, this.sel.c);
