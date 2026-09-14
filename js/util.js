@@ -155,12 +155,33 @@ var U = (function () {
     return out;
   }
 
-  /* 한 셀에 담긴 글 → 연습용 줄 배열 */
+  /* 한 칸 안에서 사용자가 누른 줄바꿈을 나타내는 표시.
+     input 에 그대로 담기고 저장해도 살아남는 글자라서 이걸 쓴다. */
+  var LINE_BREAK = '\u21b5';
+
+  /* 붙여넣은 글 → 한 칸에 담을 값. 줄바꿈은 표시로 바꿔 둔다. */
+  function toCellValue(text) {
+    return String(text)
+      .replace(/\r\n?/g, '\n')
+      .split('\n')
+      .map(function (l) { return l.replace(/\s+/g, ' ').trim(); })
+      .filter(function (l) { return l !== ''; })       /* 연 사이 빈 줄은 덜어낸다 */
+      .join(' ' + LINE_BREAK + ' ');
+  }
+
+  /* 한 셀에 담긴 글 → 연습용 줄 배열.
+     사용자가 나눈 줄을 그대로 살리고, 너무 긴 줄만 문장 단위로 더 나눈다.
+     (노래 가사나 시처럼 행 나눔이 정해진 글을 임의로 자르지 않기 위함) */
   function toPracticeLines(raw, max) {
-    max = max || 80;
+    max = max || 100;
     var out = [];
-    splitSentences(String(raw)).forEach(function (sent) {
-      out = out.concat(wrapLine(sent, max));
+    String(raw).split(LINE_BREAK).forEach(function (seg) {
+      seg = seg.replace(/\s+/g, ' ').trim();
+      if (!seg) return;
+      if (seg.length <= max) { out.push(seg); return; }
+      splitSentences(seg).forEach(function (sent) {
+        out = out.concat(wrapLine(sent, max));
+      });
     });
     return out;
   }
@@ -330,6 +351,8 @@ var U = (function () {
     wrapLine: wrapLine,
     splitSentences: splitSentences,
     toPracticeLines: toPracticeLines,
+    toCellValue: toCellValue,
+    LINE_BREAK: LINE_BREAK,
     DISGUISES: DISGUISES,
     DISGUISE_ORDER: DISGUISE_ORDER,
     setDisguise: setDisguise,
