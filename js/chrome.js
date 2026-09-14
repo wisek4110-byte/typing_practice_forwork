@@ -150,19 +150,23 @@ var Chrome = (function () {
     U.$('#avatarBtn').title = profile.name ? profile.name + ' - 계정 설정' : '계정 설정';
   }
 
-  /* 저장 용량을 위해 256px 정사각형으로 줄여 보관 */
+  /* 저장 용량을 위해 256px 정사각형으로 줄여 보관하고,
+     기록 게시판에 쓸 64px 짜리도 같이 만들어 둔다. */
+  function square(im, size, quality) {
+    var cv = document.createElement('canvas');
+    cv.width = size; cv.height = size;
+    var ctx = cv.getContext('2d');
+    var side = Math.min(im.width, im.height);
+    ctx.drawImage(im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, size, size);
+    return cv.toDataURL('image/jpeg', quality);
+  }
+
   function shrink(file, cb) {
     var reader = new FileReader();
     reader.onload = function () {
       var im = new Image();
       im.onload = function () {
-        var S = 256;
-        var cv = document.createElement('canvas');
-        cv.width = S; cv.height = S;
-        var ctx = cv.getContext('2d');
-        var side = Math.min(im.width, im.height);
-        ctx.drawImage(im, (im.width - side) / 2, (im.height - side) / 2, side, side, 0, 0, S, S);
-        cb(null, cv.toDataURL('image/jpeg', 0.86));
+        cb(null, square(im, 256, 0.86), square(im, 64, 0.8));
       };
       im.onerror = function () { cb(new Error('이미지를 읽을 수 없습니다.')); };
       im.src = reader.result;
@@ -172,7 +176,7 @@ var Chrome = (function () {
   }
 
   function openProfileDialog() {
-    var draft = { name: profile.name, image: profile.image };
+    var draft = { name: profile.name, image: profile.image, thumb: profile.thumb || null };
 
     var m = buildModal('계정 설정', '프로필 사진과 아이디를 지정합니다.');
 
@@ -239,7 +243,7 @@ var Chrome = (function () {
 
     fileBtn.addEventListener('click', function () { fileInput.click(); });
     resetBtn.addEventListener('click', function () {
-      draft.image = null; err.textContent = ''; paintPreview();
+      draft.image = null; draft.thumb = null; err.textContent = ''; paintPreview();
     });
     fileInput.addEventListener('change', function () {
       var f = fileInput.files && fileInput.files[0];
@@ -252,9 +256,10 @@ var Chrome = (function () {
         return;
       }
       err.textContent = '';
-      shrink(f, function (e2, dataUrl) {
+      shrink(f, function (e2, dataUrl, thumb) {
         if (e2) { err.textContent = e2.message; return; }
         draft.image = dataUrl;
+        draft.thumb = thumb;
         paintPreview();
       });
     });
@@ -268,6 +273,7 @@ var Chrome = (function () {
     function doSave() {
       profile.name = nameInput.value.trim().slice(0, ID_MAX);
       profile.image = draft.image;
+      profile.thumb = draft.thumb || null;
       U.save('profile', profile);
       paintAvatar();
       closeModal();
@@ -390,6 +396,10 @@ var Chrome = (function () {
     actions: actions,
     button: button,
     showDropdown: showDropdown,
-    hideDropdown: hideDropdown
+    hideDropdown: hideDropdown,
+    getProfile: function () {
+      return { name: profile.name || '', image: profile.image || null,
+               thumb: profile.thumb || profile.image || null };
+    }
   };
 })();
