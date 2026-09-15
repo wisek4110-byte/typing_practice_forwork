@@ -172,11 +172,12 @@ var U = (function () {
   /* ---------- 붙여넣기에서 줄바꿈 건져 오기 ----------
      인터넷에서 긁어온 글은 사이트마다 태그 모양이 달라서
      text/plain 에 줄바꿈이 하나도 안 담겨 오는 경우가 있다.
-     (그럴 때 메모장을 거쳐야 했다.)
-     그래서 줄바꿈이 안 보이면 같이 실려 온 text/html 을 뜯어서 줄을 되살린다. */
+     (복사를 막으려고 클립보드를 다시 쓰는 사이트가 그렇다. 그럴 때 메모장을 거쳐야 했다.)
+     그래서 같이 실려 온 text/html 을 뜯어 보고 줄이 더 잘 살아 있는 쪽을 쓴다. */
 
   var BLOCK_TAG = /^(P|DIV|LI|TR|H[1-6]|SECTION|ARTICLE|BLOCKQUOTE|PRE|UL|OL|DL|DD|DT|TABLE|TBODY|THEAD|HEADER|FOOTER|FIGCAPTION|ADDRESS|HR)$/;
   var BLOCK_STYLE = /display\s*:\s*(block|flex|grid|list-item|table)/i;
+  var PRE_STYLE = /white-space\s*:\s*(pre|pre-wrap|pre-line|break-spaces)/i;
 
   function htmlToText(html) {
     var doc;
@@ -188,25 +189,31 @@ var U = (function () {
     var out = '';
     function br() { if (out && !/\n$/.test(out)) out += '\n'; }
 
-    (function walk(node) {
+    /* pre 안에서는 글 속의 줄바꿈이 그대로 화면에 나오므로 뭉개면 안 된다 */
+    (function walk(node, pre) {
       for (var n = node.firstChild; n; n = n.nextSibling) {
-        if (n.nodeType === 3) { out += n.nodeValue.replace(/[\t\r\n ]+/g, ' '); continue; }
+        if (n.nodeType === 3) {
+          out += pre ? n.nodeValue.replace(/\r\n?/g, '\n')
+                     : n.nodeValue.replace(/[\t\r\n ]+/g, ' ');
+          continue;
+        }
         if (n.nodeType !== 1) continue;
         var tag = n.tagName;
         if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'HEAD') continue;
         if (tag === 'BR') { out += '\n'; continue; }
+        var style = n.getAttribute('style') || '';
         /* 태그 이름이 줄을 나누는 것이거나, 인라인 태그라도 style 로 블록이면 나눈다 */
-        var block = BLOCK_TAG.test(tag) || BLOCK_STYLE.test(n.getAttribute('style') || '');
+        var block = BLOCK_TAG.test(tag) || BLOCK_STYLE.test(style);
         if (block) br();
-        walk(n);
+        walk(n, pre || tag === 'PRE' || PRE_STYLE.test(style));
         if (block) br();
       }
-    })(doc.body);
+    })(doc.body, false);
 
     return out;
   }
 
-  /* 줄이 둘 이상 잡히는 쪽을 고른다 */
+  /* 알맹이가 있는 줄의 개수 (빈 줄은 세지 않는다) */
   function countLines(text) {
     var n = 0;
     String(text).replace(/\r\n?/g, '\n').split('\n').forEach(function (l) {
@@ -215,19 +222,42 @@ var U = (function () {
     return n;
   }
 
+  /* 공백을 모두 덜어낸 알맹이. 두 표현이 같은 글인지 대볼 때 쓴다. */
+  function bare(text) { return String(text).replace(/\s+/g, ''); }
+
   function clipboardText(e) {
     var cb = (e && e.clipboardData) || window.clipboardData;
     if (!cb) return '';
     var plain = '';
     try { plain = cb.getData('text') || ''; } catch (err) { plain = ''; }
-    if (countLines(plain) > 1) return plain;        /* 줄바꿈이 이미 있으면 그대로 */
 
     var html = '';
     try { html = cb.getData('text/html') || ''; } catch (err) { html = ''; }
     if (!html) return plain;
 
     var fromHtml = htmlToText(html);
-    return countLines(fromHtml) > countLines(plain) ? fromHtml : plain;
+    if (countLines(fromHtml) <= countLines(plain)) return plain;   /* 일반 텍스트가 낫거나 같다 */
+
+    /* 줄을 더 살렸다면, 같은 글자를 담고 있을 때만 믿는다.
+       (엉뚱한 데를 긁어 온 것이 아님을 확인하는 셈) */
+    if (bare(fromHtml) === bare(plain)) return fromHtml;
+
+    /* 글자가 다른데 일반 텍스트에 줄이 이미 있으면 그쪽을 지킨다. */
+    if (countLines(plain) > 1) return plain;
+
+    /* 줄이 아예 없을 때만 HTML 에 기대되, 일반 텍스트에 없던 줄은 덜어낸다.
+       (사이트가 '무단 전재 금지' 같은 문구를 끼워 넣는 경우) */
+    return dropAddedLines(fromHtml, plain);
+  }
+
+  /* 일반 텍스트에서 찾을 수 없는 줄 = 사이트가 복사할 때 끼워 넣은 것 */
+  function dropAddedLines(text, plain) {
+    var flat = bare(plain);
+    if (!flat) return text;                       /* 댈 것이 없으면 그대로 둔다 */
+    return String(text).split('\n').filter(function (line) {
+      var key = bare(line);
+      return key === '' || flat.indexOf(key) >= 0;
+    }).join('\n');
   }
 
   /* 한 셀에 담긴 글 → 연습용 줄 배열.
