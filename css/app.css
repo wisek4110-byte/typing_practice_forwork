@@ -502,14 +502,21 @@ button{ font-family:inherit; }
 /* 셀 직접 편집(시트2) */
 .celledit{
   position:absolute; left:0; top:0;
-  height:calc(var(--row-h) - 1px);
   min-width:100%;
   border:0; outline:none;
   padding:0 3px;
+  margin:0;
   font-family:inherit; font-size:var(--cell-fs);
-  line-height:calc(var(--row-h) - 1px);
+  line-height:var(--row-h);
   background:#fff;
   z-index:7;
+  /* 여러 줄 편집칸 (Alt+Enter 로 칸 안에서 줄을 나눈다) */
+  display:block;
+  resize:none;
+  overflow:hidden;
+  white-space:pre-wrap;
+  word-break:break-all;
+  box-sizing:border-box;
 }
 
 /* ------------------------------------------------------------

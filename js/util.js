@@ -260,6 +260,14 @@ var U = (function () {
     }).join('\n');
   }
 
+  /* 저장 표시(↵) → 편집칸에 보여 줄 진짜 줄바꿈 */
+  function fromCellValue(value) {
+    return String(value == null ? '' : value)
+      .split(LINE_BREAK)
+      .map(function (l) { return l.trim(); })
+      .join('\n');
+  }
+
   /* 한 셀에 담긴 글 → 연습용 줄 배열.
      사용자가 나눈 줄을 그대로 살리고, 너무 긴 줄만 문장 단위로 더 나눈다.
      (노래 가사나 시처럼 행 나눔이 정해진 글을 임의로 자르지 않기 위함) */
@@ -443,6 +451,7 @@ var U = (function () {
     splitSentences: splitSentences,
     toPracticeLines: toPracticeLines,
     toCellValue: toCellValue,
+    fromCellValue: fromCellValue,
     clipboardText: clipboardText,
     htmlToText: htmlToText,
     LINE_BREAK: LINE_BREAK,
