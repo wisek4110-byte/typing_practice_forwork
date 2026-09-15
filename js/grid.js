@@ -172,6 +172,12 @@ Sheet.prototype.mount = function (parent) { parent.appendChild(this.area); };
 
 Sheet.prototype.show = function (on) {
   this.area.hidden = !on;
+  /* 숨어 있는 동안에는 높이를 잴 수 없다. 보일 때 여러 줄 행을 다시 잰다. */
+  if (on) {
+    for (var r = 0; r < this.rows; r++) {
+      if (this.rowEls[r] && this.rowEls[r]._lines > 1) this._reflowRow(r);
+    }
+  }
   if (on && this.editable) this.focusCatcher();
 };
 
@@ -208,8 +214,7 @@ Sheet.prototype.ensureRows = function (n) {
   this.rowheadInner.appendChild(hfrag);
   this.rows = n;
   this.canvas.style.width = (this.cols * COL_W) + 'px';
-  this.canvas.style.height = (this.rows * ROW_H) + 'px';
-  if (this.selBox) this._paintSelection();
+  this._syncHeight();
 };
 
 /* ---------- 셀 값 ---------- */
@@ -231,9 +236,17 @@ Sheet.prototype.setCell = function (r, c, value, opts) {
   if (d.v !== '') cell.classList.add('has-text');
   if (d.num) cell.classList.add('is-num');
 
+  /* 붙여넣은 글에 줄바꿈이 있으면 실제 시트처럼 여러 줄로 펼쳐 보여 준다.
+     보이는 줄이 곧 시트1에서 칠 줄이라, 줄바꿈이 제대로 들어갔는지 바로 확인된다. */
+  d.lines = 1;
   if (opts.nodes) {
     t.textContent = '';
     for (var i = 0; i < opts.nodes.length; i++) t.appendChild(opts.nodes[i]);
+  } else if (this.pasteMode === 'cell' && d.v.indexOf(U.LINE_BREAK) >= 0) {
+    var shown = U.toPracticeLines(d.v);
+    d.lines = Math.max(1, shown.length);
+    t.textContent = shown.join('\n');
+    cell.classList.add('cell--wrap');
   } else {
     t.textContent = d.v;
   }
@@ -258,13 +271,47 @@ Sheet.prototype.clearAll = function () {
 Sheet.prototype._reflowRow = function (r) {
   var row = this.data[r];
   var next = this.cols;
+  var lines = 1;
   for (var c = this.cols - 1; c >= 0; c--) {
-    var t = this.els[r][c].querySelector('.cell__t');
-    if (row[c].v === '') { t.style.maxWidth = ''; continue; }
+    var cell = this.els[r][c];
+    var t = cell.querySelector('.cell__t');
+    if (row[c].v === '') { t.style.maxWidth = ''; t.style.width = ''; continue; }
     var span = (next - c) * COL_W - 6;
     t.style.maxWidth = span + 'px';
+    /* 여러 줄 칸은 폭을 못 박아야 줄바꿈 자리에서만 줄이 나뉜다 */
+    if (cell.classList.contains('cell--wrap')) {
+      t.style.width = span + 'px';
+      var n = row[c].lines || 1;
+      /* 오른쪽에 다른 내용이 있어 폭이 좁아지면 줄이 더 접힌다.
+         보이는 시트에서는 실제로 재서 잘리지 않게 한다. (숨은 시트는 높이가 0) */
+      if (t.offsetHeight > 0) n = Math.max(n, Math.round(t.offsetHeight / ROW_H));
+      lines = Math.max(lines, n);
+    } else {
+      t.style.width = '';
+    }
     next = c;
   }
+  this._setRowLines(r, lines);
+};
+
+/* 여러 줄 칸이 든 행은 줄 수만큼 키운다. 행 머리글도 같이 키워야 눈금이 맞는다. */
+Sheet.prototype._setRowLines = function (r, n) {
+  var rowEl = this.rowEls[r];
+  if (!rowEl || (rowEl._lines || 1) === n) return;
+  rowEl._lines = n;
+  var h = n > 1 ? (n * ROW_H) + 'px' : '';
+  rowEl.style.height = h;
+  rowEl.classList.toggle('is-tall', n > 1);
+  var rh = this.rowheadInner.children[r];
+  if (rh) rh.style.height = h;
+  this._syncHeight();
+};
+
+/* 행 높이가 제각각일 수 있으니 전체 높이는 최소값만 잡고 내용에 맡긴다 */
+Sheet.prototype._syncHeight = function () {
+  this.canvas.style.height = '';
+  this.canvas.style.minHeight = (this.rows * ROW_H) + 'px';
+  if (this.selBox) this._paintSelection();
 };
 
 /* ---------- 행 강조 ----------
@@ -284,8 +331,17 @@ Sheet.prototype.clearRowMarks = function () {
 
 /* 글자 크기가 바뀌어 행 높이가 달라졌을 때 전체 높이를 다시 잡는다. */
 Sheet.prototype.resizeRows = function () {
-  this.canvas.style.height = (this.rows * ROW_H) + 'px';
-  this._paintSelection();
+  /* 글자 크기가 바뀌면 --row-h 가 달라지므로 늘려 둔 행도 다시 잰다 */
+  for (var r = 0; r < this.rows; r++) {
+    var rowEl = this.rowEls[r];
+    if (!rowEl || !(rowEl._lines > 1)) continue;
+    var h = (rowEl._lines * ROW_H) + 'px';
+    rowEl.style.height = h;
+    var rh = this.rowheadInner.children[r];
+    if (rh) rh.style.height = h;
+    this._reflowRow(r);            /* 폭이 그대로여도 접히는 자리가 달라질 수 있다 */
+  }
+  this._syncHeight();
 };
 
 /* ---------- 선택 ----------
@@ -330,10 +386,13 @@ Sheet.prototype.rangeLabel = function () {
 Sheet.prototype._paintSelection = function () {
   var g = this.getRange();
   var box = this.selBox;
+  var first = this.rowEls[g.r1], last = this.rowEls[g.r2];
+  var top = first ? first.offsetTop : g.r1 * ROW_H;
+  var bottom = last ? last.offsetTop + last.offsetHeight : (g.r2 + 1) * ROW_H;
   box.style.left = (g.c1 * COL_W) + 'px';
-  box.style.top = (g.r1 * ROW_H) + 'px';
+  box.style.top = top + 'px';
   box.style.width = ((g.c2 - g.c1 + 1) * COL_W - 1) + 'px';
-  box.style.height = ((g.r2 - g.r1 + 1) * ROW_H - 1) + 'px';
+  box.style.height = (bottom - top - 1) + 'px';
   box.classList.toggle('is-multi', g.r1 !== g.r2 || g.c1 !== g.c2);
 
   var i, ch = this.colheadInner.children, rh = this.rowheadInner.children;
@@ -372,12 +431,14 @@ Sheet.prototype.revealX = function (x, pad) {
 
 Sheet.prototype.revealRow = function (r, pad) {
   pad = pad == null ? 3 : pad;
-  var top = r * ROW_H;
+  var el = this.rowEls[r];
+  var top = el ? el.offsetTop : r * ROW_H;
+  var h = el ? el.offsetHeight : ROW_H;
   var view = this.scroll.clientHeight;
   if (top < this.scroll.scrollTop + pad * ROW_H) {
     this.scroll.scrollTop = Math.max(0, top - pad * ROW_H);
-  } else if (top + ROW_H > this.scroll.scrollTop + view - pad * ROW_H) {
-    this.scroll.scrollTop = top + ROW_H - view + pad * ROW_H;
+  } else if (top + h > this.scroll.scrollTop + view - pad * ROW_H) {
+    this.scroll.scrollTop = top + h - view + pad * ROW_H;
   }
 };
 
@@ -386,24 +447,63 @@ Sheet.prototype.startEdit = function (r, c, seed) {
   if (!this.editable) return;
   if (this.editing) this.commitEdit();
   this.select(r, c);
+  var self = this;
   var cell = this.cellEl(r, c);
   var t = cell.querySelector('.cell__t');
-  var input = document.createElement('input');
+
+  /* 실제 시트처럼 여러 줄을 담는 편집칸.
+     줄바꿈 표시(↵)는 진짜 줄로 펼쳐서 보여 준다. 여기서 Alt+Enter 로 줄을 나눈다. */
+  var input = document.createElement('textarea');
   input.className = 'celledit';
-  input.value = seed != null ? seed : this.data[r][c].v;
+  input.rows = 1;
+  input.value = seed != null ? seed : U.fromCellValue(this.data[r][c].v);
+
+  /* 칸에 보이던 그대로의 폭을 쓴다 (넘침 폭 → 없으면 넉넉히) */
+  var shown = t.style.width ? parseFloat(t.style.width) : 0;
   var wide = (this.cols - c) * COL_W - 4;
-  input.style.width = Math.max(COL_W - 4, Math.min(wide, 520)) + 'px';
+  input.style.width = (shown || Math.max(COL_W - 4, Math.min(wide, 520))) + 'px';
+
   t.style.visibility = 'hidden';
   cell.appendChild(input);
   this.editing = { r: r, c: c, input: input };
   input.focus();
   input.setSelectionRange(input.value.length, input.value.length);
+  grow();
 
-  var self = this;
+  /* 줄 수에 맞춰 편집칸과 행을 같이 키운다 */
+  function grow() {
+    input.style.height = 'auto';
+    var lines = Math.max(1, Math.round(input.scrollHeight / ROW_H));
+    input.style.height = (lines * ROW_H - 1) + 'px';
+    self._setRowLines(r, lines);
+  }
+
+  /* 커서 자리에 글을 끼워 넣는다 */
+  function insert(text) {
+    var a = input.selectionStart, b = input.selectionEnd;
+    input.value = input.value.slice(0, a) + text + input.value.slice(b);
+    var at = a + text.length;
+    input.setSelectionRange(at, at);
+    grow();
+  }
+
+  /* 사이트마다 클립보드 모양이 달라 줄바꿈이 빠질 수 있으므로 여기서도 건져 온다 */
+  input.addEventListener('paste', function (e) {
+    var text = U.clipboardText(e);
+    if (!text) return;
+    e.preventDefault();
+    insert(text.replace(/\r\n?/g, '\n'));
+  });
+
+  input.addEventListener('input', grow);
+
   input.addEventListener('keydown', function (e) {
     if (e.isComposing) return;
     if (e.key === 'Enter') {
-      e.preventDefault(); self.commitEdit(); self.moveSel(1, 0);
+      e.preventDefault();
+      /* Alt+Enter (또는 Ctrl+Enter) 는 한 칸 안에서 줄 나누기 */
+      if (e.altKey || e.ctrlKey || e.metaKey) { insert('\n'); return; }
+      self.commitEdit(); self.moveSel(1, 0);
     } else if (e.key === 'Tab') {
       e.preventDefault(); self.commitEdit(); self.moveSel(0, e.shiftKey ? -1 : 1);
     } else if (e.key === 'Escape') {
@@ -417,7 +517,7 @@ Sheet.prototype.commitEdit = function () {
   if (!this.editing) return;
   var e = this.editing;
   this.editing = null;
-  var v = e.input.value;
+  var v = U.toCellValue(e.input.value);   /* 줄바꿈을 저장 표시(↵)로 되돌린다 */
   e.input.remove();
   var t = this.cellEl(e.r, e.c).querySelector('.cell__t');
   t.style.visibility = '';
@@ -432,6 +532,7 @@ Sheet.prototype.cancelEdit = function () {
   this.editing = null;
   e.input.remove();
   this.cellEl(e.r, e.c).querySelector('.cell__t').style.visibility = '';
+  this._reflowRow(e.r);          /* 편집하며 늘려 둔 행을 원래 높이로 */
   this.focusCatcher();
 };
 
@@ -480,18 +581,23 @@ Sheet.prototype.extendSel = function (dr, dc) {
   this.revealRow(this.sel.r, 1);
 };
 
+/* 글 한 편을 한 칸에 담는다 (시트2). 줄로 쪼개지 않는다. */
+Sheet.prototype.pasteIntoCell = function (r, c, text) {
+  var one = U.toCellValue(text);   /* 줄바꿈은 표시(↵)로 남겨 저장까지 살린다 */
+  if (!one) return false;
+  this.setCell(r, c, one);
+  this.select(r, c);
+  this.onChange(r, c);
+  return true;
+};
+
 Sheet.prototype._paste = function (e) {
-  var text = (e.clipboardData || window.clipboardData).getData('text');
+  var text = U.clipboardText(e);
   if (!text) return;
   e.preventDefault();
 
-  /* 글 한 편을 한 칸에 담는 방식 (시트2). 줄로 쪼개지 않는다. */
   if (this.pasteMode === 'cell') {
-    var one = U.toCellValue(text);   /* 사용자가 누른 줄바꿈을 표시로 남긴다 */
-    if (!one) return;
-    this.setCell(this.sel.r, this.sel.c, one);
-    this.select(this.sel.r, this.sel.c);
-    this.onChange(this.sel.r, this.sel.c);
+    this.pasteIntoCell(this.sel.r, this.sel.c, text);
     return;
   }
 
