@@ -169,6 +169,67 @@ var U = (function () {
       .join(' ' + LINE_BREAK + ' ');
   }
 
+  /* ---------- 붙여넣기에서 줄바꿈 건져 오기 ----------
+     인터넷에서 긁어온 글은 사이트마다 태그 모양이 달라서
+     text/plain 에 줄바꿈이 하나도 안 담겨 오는 경우가 있다.
+     (그럴 때 메모장을 거쳐야 했다.)
+     그래서 줄바꿈이 안 보이면 같이 실려 온 text/html 을 뜯어서 줄을 되살린다. */
+
+  var BLOCK_TAG = /^(P|DIV|LI|TR|H[1-6]|SECTION|ARTICLE|BLOCKQUOTE|PRE|UL|OL|DL|DD|DT|TABLE|TBODY|THEAD|HEADER|FOOTER|FIGCAPTION|ADDRESS|HR)$/;
+  var BLOCK_STYLE = /display\s*:\s*(block|flex|grid|list-item|table)/i;
+
+  function htmlToText(html) {
+    var doc;
+    /* DOMParser 로 읽으면 문서에 붙지 않아 스크립트나 이미지가 돌지 않는다. */
+    try { doc = new DOMParser().parseFromString(String(html), 'text/html'); }
+    catch (err) { return ''; }
+    if (!doc || !doc.body) return '';
+
+    var out = '';
+    function br() { if (out && !/\n$/.test(out)) out += '\n'; }
+
+    (function walk(node) {
+      for (var n = node.firstChild; n; n = n.nextSibling) {
+        if (n.nodeType === 3) { out += n.nodeValue.replace(/[\t\r\n ]+/g, ' '); continue; }
+        if (n.nodeType !== 1) continue;
+        var tag = n.tagName;
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'HEAD') continue;
+        if (tag === 'BR') { out += '\n'; continue; }
+        /* 태그 이름이 줄을 나누는 것이거나, 인라인 태그라도 style 로 블록이면 나눈다 */
+        var block = BLOCK_TAG.test(tag) || BLOCK_STYLE.test(n.getAttribute('style') || '');
+        if (block) br();
+        walk(n);
+        if (block) br();
+      }
+    })(doc.body);
+
+    return out;
+  }
+
+  /* 줄이 둘 이상 잡히는 쪽을 고른다 */
+  function countLines(text) {
+    var n = 0;
+    String(text).replace(/\r\n?/g, '\n').split('\n').forEach(function (l) {
+      if (l.trim()) n++;
+    });
+    return n;
+  }
+
+  function clipboardText(e) {
+    var cb = (e && e.clipboardData) || window.clipboardData;
+    if (!cb) return '';
+    var plain = '';
+    try { plain = cb.getData('text') || ''; } catch (err) { plain = ''; }
+    if (countLines(plain) > 1) return plain;        /* 줄바꿈이 이미 있으면 그대로 */
+
+    var html = '';
+    try { html = cb.getData('text/html') || ''; } catch (err) { html = ''; }
+    if (!html) return plain;
+
+    var fromHtml = htmlToText(html);
+    return countLines(fromHtml) > countLines(plain) ? fromHtml : plain;
+  }
+
   /* 한 셀에 담긴 글 → 연습용 줄 배열.
      사용자가 나눈 줄을 그대로 살리고, 너무 긴 줄만 문장 단위로 더 나눈다.
      (노래 가사나 시처럼 행 나눔이 정해진 글을 임의로 자르지 않기 위함) */
@@ -352,6 +413,8 @@ var U = (function () {
     splitSentences: splitSentences,
     toPracticeLines: toPracticeLines,
     toCellValue: toCellValue,
+    clipboardText: clipboardText,
+    htmlToText: htmlToText,
     LINE_BREAK: LINE_BREAK,
     DISGUISES: DISGUISES,
     DISGUISE_ORDER: DISGUISE_ORDER,

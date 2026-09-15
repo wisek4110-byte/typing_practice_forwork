@@ -407,8 +407,8 @@ button{ font-family:inherit; }
   background:var(--header-bg);
 }
 .rh{
+  display:flex; align-items:center; justify-content:center;
   width:calc(var(--rowhead-w) - 1px); height:var(--row-h);
-  line-height:var(--row-h);
   text-align:center;
   font-size:11px; color:var(--text-dim);
   border-bottom:1px solid var(--gridline);
@@ -434,7 +434,7 @@ button{ font-family:inherit; }
   position:relative;
   flex:none;
   width:var(--col-w);
-  height:var(--row-h);
+  height:100%;
   border-right:1px solid var(--gridline);
   border-bottom:1px solid var(--gridline);
   font-size:var(--cell-fs);
@@ -451,6 +451,17 @@ button{ font-family:inherit; }
   overflow:hidden;
   pointer-events:none;
 }
+/* ---- 여러 줄이 든 칸 (시트2에 가사 · 시를 붙여넣었을 때) ----
+   붙여넣은 줄바꿈 자리에서 실제로 줄이 나뉘어 보이므로
+   줄이 제대로 들어갔는지 시트에서 바로 확인할 수 있다. */
+.cell--wrap > .cell__t{
+  height:auto;
+  line-height:var(--row-h);
+  white-space:pre-wrap;
+  word-break:break-all;
+  z-index:1;
+}
+
 .cell.has-text{ z-index:1; }
 .cell.is-num > .cell__t{ left:auto; right:4px; }
 .cell.is-bold > .cell__t{ font-weight:700; }
